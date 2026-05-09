@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccommodationLevel {
+  three
+  four
+  five
+  deluxe
+}
+
+enum TransferStatus {
+  in
+  out
+  none
+}
+
+enum PricingLineItemKind {
+  hotel
+  activity
+  custom
+  general
+  fee
+}
+
+enum Occupancy {
+  single
+  double
+  triple
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String?      @unique
+  provider     String
+  providerId   String       @unique
+  createdAt    DateTime     @default(now())
+  itineraries  Itinerary[]
+}
+
+model Itinerary {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  description String?
+  coverImageBase64 String?
+  messageTemplate Json?
+  startDate DateTime
+  createdByName String?
+  updatedByName String?
+  accommodationLevel AccommodationLevel @default(three)
+  /// When true, days skip auto-created hotel/activity line-item placeholders (blank pricing rows).
+  blankPricing Boolean @default(false)
+  totalPriceUsd Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  days      Day[]
+  pricingItems ItineraryPricingItem[]
+  clients   Client[]
+
+  @@index([userId])
+}
+
+model Client {
+  id                 String              @id @default(cuid())
+  firstName          String
+  lastName           String
+  email              String?
+  itineraryId        String?
+  itinerary          Itinerary?          @relation(fields: [itineraryId], references: [id], onDelete: SetNull)
+  travelStartDate    DateTime?
+  passengers         Int                 @default(1)
+  accommodationLevel AccommodationLevel  @default(three)
+  occupancy          Occupancy           @default(double)
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([itineraryId])
+}
+
+model Day {
+  id                 String              @id @default(cuid())
+  itineraryId        String
+  itinerary          Itinerary           @relation(fields: [itineraryId], references: [id])
+  dayNumber          Int
+  title              String
+  description        String
+  hotelName          String?
+  date               DateTime?
+  dayOfWeek          String?
+  accommodationLevel AccommodationLevel
+  destination        String
+  destinationId      String?
+  destinationRef     Destination?        @relation(fields: [destinationId], references: [id])
+  transferStatus     TransferStatus
+  transferCount      Int @default(0)
+  components         Json?
+  activityName       String?
+  activityPriceUsd Int    @default(0)
+  accommodationPriceUsd Int @default(0)
+  transferPriceUsd Int @default(0)
+  destinationPriceUsd Int @default(0)
+  totalPriceUsd   Int @default(0)
+  updatedAt DateTime @updatedAt
+  pricings          DayPricing[]
+  pricingItems      DayPricingItem[]
+
+  @@index([itineraryId])
+  @@index([destinationId])
+}
+
+model DayPricing {
+  id                     String              @id @default(cuid())
+  dayId                  String
+  day                    Day                 @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  accommodationLevel     AccommodationLevel
+  activityPriceUsd     Int                 @default(0)
+  transferPriceUsd     Int                 @default(0)
+  accommodationPriceUsd Int                @default(0)
+  updatedAt              DateTime            @updatedAt
+
+  @@unique([dayId, accommodationLevel])
+  @@index([dayId, accommodationLevel])
+}
+
+model PricingLineItemTemplate {
+  id                  String              @id @default(cuid())
+  name                String              @unique
+  sku                 String              @unique
+  kind                PricingLineItemKind @default(custom)
+  defaultAmountUsd  Int                 @default(0)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  prices              PricingLineItemTemplatePrice[]
+  dayItems            DayPricingItem[]
+  itineraryItems      ItineraryPricingItem[]
+
+  @@index([kind])
+}
+
+model PricingLineItemTemplatePrice {
+  id                 String              @id @default(cuid())
+  templateId         String
+  template           PricingLineItemTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  accommodationLevel AccommodationLevel
+  occupancy          Occupancy
+  amountUsd          Int                 @default(0)
+
+  @@unique([templateId, accommodationLevel, occupancy])
+  @@index([templateId, accommodationLevel, occupancy])
+}
+
+model ItineraryPricingItem {
+  id             String              @id @default(cuid())
+  itineraryId    String
+  itinerary      Itinerary           @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  accommodationLevel AccommodationLevel @default(three)
+  occupancy      Occupancy           @default(double)
+  name           String
+  amountUsd    Int                 @default(0)
+  kind           PricingLineItemKind @default(general)
+  templateId     String?
+  template       PricingLineItemTemplate? @relation(fields: [templateId], references: [id])
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([itineraryId, accommodationLevel, occupancy])
+  @@index([templateId])
+}
+
+model DayPricingItem {
+  id             String              @id @default(cuid())
+  dayId          String
+  day            Day                 @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  accommodationLevel AccommodationLevel @default(three)
+  occupancy      Occupancy           @default(double)
+  name           String
+  amountUsd    Int                 @default(0)
+  kind           PricingLineItemKind @default(custom)
+  templateId     String?
+  template       PricingLineItemTemplate? @relation(fields: [templateId], references: [id])
+  isRemoved      Boolean             @default(false)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([dayId, accommodationLevel, occupancy])
+  @@index([templateId])
+}
+
+model ProposalDraft {
+  id        String   @id @default(cuid())
+  title     String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Organizer of data; no direct price effect
+model Provider {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  slug            String   @unique
+  active          Boolean  @default(true)
+  surchargeUsd  Int?     // optional organizer-level surcharge
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  destinations    Destination[]
+}
+
+model Destination {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    Provider @relation(fields: [providerId], references: [id])
+  name        String
+  slug        String   @unique
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  accommodationPrices DestinationAccommodationPrice[]
+  transferPrices      DestinationTransferPrice[]
+  activities         DestinationActivity[]
+  days               Day[]
+
+  @@index([providerId])
+}
+
+model DestinationAccommodationPrice {
+  id                 String   @id @default(cuid())
+  destinationId      String
+  destination        Destination @relation(fields: [destinationId], references: [id])
+  accommodationLevel AccommodationLevel
+  basePriceUsd     Int
+  validFrom          DateTime
+  validTo            DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([destinationId, accommodationLevel, validFrom, validTo])
+}
+
+enum TransferVisibility {
+  public
+  private
+}
+
+model DestinationTransferPrice {
+  id                 String   @id @default(cuid())
+  destinationId      String
+  destination        Destination @relation(fields: [destinationId], references: [id])
+  accommodationLevel AccommodationLevel
+  transferType       TransferStatus
+  visibility         TransferVisibility
+  addUsd           Int
+  validFrom          DateTime
+  validTo            DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([destinationId, accommodationLevel, transferType, visibility, validFrom, validTo])
+}
+
+model DestinationActivity {
+  id            String   @id @default(cuid())
+  destinationId String
+  destination   Destination @relation(fields: [destinationId], references: [id])
+  name          String
+  description   String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  prices        DestinationActivityPrice[]
+
+  @@index([destinationId])
+}
+
+model DestinationActivityPrice {
+  id                 String   @id @default(cuid())
+  activityId         String
+  activity           DestinationActivity @relation(fields: [activityId], references: [id])
+  accommodationLevel AccommodationLevel
+  amountUsd        Int
+  validFrom          DateTime
+  validTo            DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([activityId, accommodationLevel, validFrom, validTo])
+}
+
+

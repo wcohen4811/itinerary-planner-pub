@@ -1,0 +1,133 @@
+import OpenAI from 'openai';
+import { DayCreate, DayJsonSchema, accommodationLevelValues, transferStatusValues } from '../types/day.js';
+
+type GenerateParams = {
+  numDays: number;
+  destination: string;
+  title?: string;
+  style?: 'relaxed' | 'balanced' | 'active';
+  preferences?: string[];
+  accommodationLevel?: (typeof accommodationLevelValues)[number];
+};
+
+function haveOpenAI(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+export async function generateItinerary(params: GenerateParams): Promise<DayCreate[]> {
+  if (!haveOpenAI()) {
+    return fallbackGenerate(params);
+  }
+  try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const system = [
+      'You are an expert travel planner.',
+      'Generate a day-by-day itinerary strictly following the JSON schema provided.',
+      'Ensure each day contains: dayNumber, title, description, accommodationLevel, destination, transferStatus, transferCount.',
+      'Use the provided country and desired style; keep titles short and descriptions practical.',
+      'Do not include IDs; the server will assign them.',
+    ].join(' ');
+    const user = [
+      `Create an itinerary for ${params.numDays} days at destination ${params.destination}.`,
+      params.title ? `Title: ${params.title}.` : '',
+      params.style ? `Style: ${params.style}.` : '',
+      params.accommodationLevel ? `Accommodation level: ${params.accommodationLevel}.` : '',
+      params.preferences?.length ? `Preferences: ${params.preferences.join(', ')}.` : '',
+      'Return only JSON matching the schema.',
+    ].join(' ');
+
+    // Using Responses API with JSON schema if available in SDK
+    const response = await client.responses.create({
+      model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+      input: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: DayJsonSchema,
+      },
+    } as any);
+
+    const text = response?.output_text ?? '';
+    const parsed = JSON.parse(text) as { days: any[] };
+    const days: DayCreate[] = parsed.days.map((d, i) => {
+      const transferStatus = normalizeTransfer(d.transferStatus);
+      const transferCount =
+        typeof (d as any).transferCount === 'number'
+          ? Math.max(0, Math.floor((d as any).transferCount))
+          : transferStatus === 'none'
+          ? 0
+          : 1;
+      return {
+        // server will assign id
+        dayNumber: toInt(d.dayNumber) ?? i + 1,
+        title: String(d.title ?? `Day ${i + 1}`),
+        description: String(d.description ?? `Activities in ${params.destination}`),
+        accommodationLevel: normalizeAccommodation(d.accommodationLevel, params.accommodationLevel),
+        destination: String((d as any).destination ?? params.destination),
+        transferStatus,
+        transferCount,
+        components: Array.isArray(d.components) ? d.components : undefined,
+      };
+    });
+    return days;
+  } catch {
+    // Fall back if API fails or schema not supported by model
+    return fallbackGenerate(params);
+  }
+}
+
+function fallbackGenerate(params: GenerateParams): DayCreate[] {
+  const days: DayCreate[] = [];
+  for (let i = 1; i <= params.numDays; i += 1) {
+    const transferStatus = i === 1 ? 'in' : i === params.numDays ? 'out' : 'none';
+    days.push({
+      dayNumber: i,
+      title: params.title ? `${params.title} — Day ${i}` : `Day ${i} in ${params.destination}`,
+      description: makeDescription(params.destination, i, params.style, params.preferences),
+      accommodationLevel: params.accommodationLevel ?? '4',
+      destination: params.destination,
+      transferStatus: transferStatus as (typeof transferStatusValues)[number],
+      transferCount: transferStatus === 'none' ? 0 : 1,
+    });
+  }
+  return days;
+}
+
+function makeDescription(destination: string, i: number, style?: string, preferences?: string[]): string {
+  const styleText =
+    style === 'relaxed'
+      ? 'with a relaxed pace and ample downtime'
+      : style === 'active'
+      ? 'with an active schedule and longer excursions'
+      : 'with a balanced mix of activities and free time';
+  const prefs = preferences?.length ? ` Focus on ${preferences.join(', ')}.` : '';
+  return `Enjoy ${destination} on day ${i}, ${styleText}. Morning activities, afternoon experiences, and evening dining.${prefs}`;
+}
+
+function toInt(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+function normalizeAccommodation(
+  value: unknown,
+  defaultLevel?: (typeof accommodationLevelValues)[number],
+): (typeof accommodationLevelValues)[number] {
+  const v = String(value ?? '').toLowerCase();
+  if ((accommodationLevelValues as readonly string[]).includes(v)) {
+    return v as (typeof accommodationLevelValues)[number];
+  }
+  return defaultLevel ?? '4';
+}
+
+function normalizeTransfer(value: unknown): (typeof transferStatusValues)[number] {
+  const v = String(value ?? '').toLowerCase();
+  if ((transferStatusValues as readonly string[]).includes(v)) {
+    return v as (typeof transferStatusValues)[number];
+  }
+  return 'none';
+}
+
+

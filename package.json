@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@prisma/client": "^7.1.0",
+    "prisma": "^7.1.0",
+    "read-excel-file": "^4.1.0"
+  }
+}

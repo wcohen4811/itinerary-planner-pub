@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Itinerary Planner</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; margin: 20px; line-height: 1.4; }
+      header { margin-bottom: 16px; }
+      section { margin: 16px 0; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+      h2 { margin: 0 0 8px 0; font-size: 18px; }
+      input, select, button, textarea { font: inherit; padding: 8px; margin: 4px 0; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      pre { background: #f7f7f7; padding: 10px; overflow: auto; }
+    </style>
+    <script type="module" crossorigin src="/assets/index-D0ubt7fI.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Itinerary Planner</h1>
+      <div id="status">Backend: <em>checking…</em></div>
+    </header>
+
+    <section>
+      <h2>Health & Ping</h2>
+      <div class="row">
+        <button id="checkHealth">Check Health</button>
+        <button id="doPing">Ping</button>
+      </div>
+      <pre id="hpOut"></pre>
+    </section>
+
+    <section>
+      <h2>Create Day</h2>
+      <div class="row">
+        <input id="dayNumber" type="number" placeholder="Day number" value="1" />
+        <input id="title" type="text" placeholder="Title" value="Arrival" />
+        <input id="provider" type="text" placeholder="Provider" value="Italy" />
+        <select id="acc">
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="deluxe">deluxe</option>
+        </select>
+        <select id="transfer">
+          <option value="in">in</option>
+          <option value="none" selected>none</option>
+          <option value="out">out</option>
+        </select>
+      </div>
+      <textarea id="description" rows="3" style="width:100%" placeholder="Description">Arrive and check in</textarea>
+      <div>
+        <button id="createDay">Create Day</button>
+      </div>
+      <pre id="createOut"></pre>
+    </section>
+
+    <section>
+      <h2>Days</h2>
+      <div class="row">
+        <button id="loadDays">Load Days</button>
+      </div>
+      <pre id="daysOut"></pre>
+    </section>
+
+    <section>
+      <h2>Itineraries (DB)</h2>
+      <div class="row">
+        <button id="loadItins">Load Itineraries</button>
+      </div>
+      <div class="row">
+        <input id="itinId" type="text" placeholder="Itinerary ID" style="flex:1" />
+        <button id="loadItin">Load Itinerary</button>
+      </div>
+      <h3 style="margin-top:8px;">Edit Itinerary</h3>
+      <div class="row">
+        <input id="itinTitle" type="text" placeholder="Title (e.g., Classic Machu Picchu)" style="flex:1" />
+        <input id="itinStartDate" type="date" />
+        <select id="itinLevel">
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="deluxe">deluxe</option>
+        </select>
+        <input id="itinUpdatedBy" type="text" placeholder="Updated by (name)" />
+        <button id="updateItin">Update Itinerary</button>
+      </div>
+      <h3 style="margin-top:8px;">Itinerary Days</h3>
+      <div class="row">
+        <button id="loadItinDays">Load Days</button>
+      </div>
+      <div class="row">
+        <input id="dayId" type="text" placeholder="Day ID (for update/delete)" style="flex:1" />
+      </div>
+      <div class="row">
+        <input id="dayNumber" type="number" placeholder="Day #" style="width:110px" />
+        <input id="dayTitle" type="text" placeholder="Day title" style="flex:1" />
+      </div>
+      <div class="row">
+        <textarea id="dayDescription" rows="3" style="flex:1" placeholder="Day description"></textarea>
+      </div>
+      <div class="row">
+        <input id="dayDestination" type="text" placeholder="Destination (e.g., Lima)" />
+        <select id="dayTransfer">
+          <option value="none">none</option>
+          <option value="in">in</option>
+          <option value="out">out</option>
+        </select>
+        <select id="dayLevel">
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="deluxe">deluxe</option>
+        </select>
+        <input id="actName" type="text" placeholder="Activity name (optional)" />
+        <input id="actPrice" type="number" placeholder="Activity price cents" />
+      </div>
+      <div class="row">
+        <button id="addDay">Add Day</button>
+        <button id="updateDay">Update Day</button>
+        <button id="deleteDay">Delete Day</button>
+      </div>
+      <pre id="itinsOut"></pre>
+      <pre id="itinOut"></pre>
+      <pre id="itinDaysOut"></pre>
+    </section>
+
+    <section>
+      <h2>AI: Generate Itinerary</h2>
+      <div class="row">
+        <input id="aiNumDays" type="number" value="3" />
+        <input id="aiProvider" type="text" value="Japan" />
+        <select id="aiStyle">
+          <option value="relaxed">relaxed</option>
+          <option value="balanced" selected>balanced</option>
+          <option value="active">active</option>
+        </select>
+        <select id="aiAcc">
+          <option value="">(auto)</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="deluxe">deluxe</option>
+        </select>
+      </div>
+      <div class="row">
+        <input id="aiTitle" type="text" placeholder="Optional title" style="flex:1" />
+      </div>
+      <div class="row">
+        <input id="aiPrefs" type="text" placeholder="Preferences comma-separated (food, museums)" style="flex:1" />
+      </div>
+      <button id="genAi">Generate</button>
+      <pre id="aiOut"></pre>
+    </section>
+
+  </body>
+  </html>
+
+
