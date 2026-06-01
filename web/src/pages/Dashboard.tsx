@@ -1515,10 +1515,24 @@ export default function Dashboard() {
             <div className="w-full max-w-[1024px] flex flex-col gap-8 pb-10">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="col-span-1 md:col-span-2 flex flex-col justify-center gap-2 p-6 bg-white dark:bg-[#1A2633] rounded-xl border border-[#e5e7eb] dark:border-gray-800 shadow-sm">
-                  <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] mb-3 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary">tune</span>
-                    Matrix Controls
-                  </h3>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary">tune</span>
+                      Matrix Controls
+                    </h3>
+                    <button
+                      className="inline-flex items-center gap-2 rounded-lg border border-[#dbe0e6] dark:border-gray-700 px-3 py-2 text-sm font-medium text-[#111418] dark:text-gray-100 hover:bg-[#f7f8fa] dark:hover:bg-gray-800 transition-colors"
+                      onClick={() => {
+                        setImpJson(null);
+                        setImpError(null);
+                        setImportTitleConflict(null);
+                        setImpOpen(true);
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">upload</span>
+                      Import Pricing
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-3">
                     <div className="flex bg-[#f0f2f4] dark:bg-[#24303f] p-1 rounded-lg">
                       {(['3', '4', '5', 'deluxe'] as const).map((lv) => (

@@ -49,15 +49,35 @@ function toNum(v: unknown): number | undefined {
 
 /** Maps the first worksheet to the JSON shape accepted by POST /admin/import-itineraries */
 export async function parseExcelToItineraryImport(file: File): Promise<Record<string, unknown>> {
-  const sheets = await readXlsxFile(file);
-  const rows = sheets[0]?.data ?? [];
+  // read-excel-file/browser can return rows directly, while some integrations
+  // may provide a wrapped worksheet-like shape. Normalize to a 2D rows array.
+  const parsed = await readXlsxFile(file);
+  const rows =
+    Array.isArray(parsed) && parsed.length > 0 && Array.isArray(parsed[0])
+      ? (parsed as unknown[][])
+      : Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && 'data' in (parsed[0] as Record<string, unknown>) && Array.isArray((parsed[0] as { data?: unknown }).data)
+        ? ((parsed[0] as { data: unknown[][] }).data ?? [])
+        : [];
   if (!rows.length) throw new Error('The spreadsheet is empty.');
 
-  const headerRow = rows[0] as unknown[];
-  const colKeys: (string | null)[] = headerRow.map((cell) => canonHeader(cell));
-
-  const hasDayCol = colKeys.some((k) => k === 'dayNumber' || k === 'title');
-  if (!hasDayCol) {
+  // Some files include intro/title rows above the actual headers.
+  // Find the first row that looks like a header row for itinerary day data.
+  let headerRowIndex = -1;
+  let colKeys: (string | null)[] = [];
+  const scanLimit = Math.min(rows.length, 25);
+  for (let i = 0; i < scanLimit; i++) {
+    const candidate = rows[i];
+    if (!Array.isArray(candidate)) continue;
+    const candidateKeys = candidate.map((cell) => canonHeader(cell));
+    const recognized = candidateKeys.filter(Boolean).length;
+    const hasDayCol = candidateKeys.some((k) => k === 'dayNumber' || k === 'title');
+    if (recognized >= 2 && hasDayCol) {
+      headerRowIndex = i;
+      colKeys = candidateKeys;
+      break;
+    }
+  }
+  if (headerRowIndex < 0) {
     throw new Error(
       'Could not find day columns. Use a header row with labels such as Day number, Title, Description, Hotel, Transfers (optional: Net price, Per person total, Itinerary title).',
     );
@@ -66,8 +86,11 @@ export async function parseExcelToItineraryImport(file: File): Promise<Record<st
   let itineraryTitle = '';
   const days: Record<string, unknown>[] = [];
 
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r] as unknown[];
+  for (let r = headerRowIndex + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!Array.isArray(row)) continue;
+    const isBlankRow = row.every((v) => v === null || v === undefined || String(v).trim() === '');
+    if (isBlankRow) continue;
     const o: Record<string, unknown> = {};
     for (let c = 0; c < row.length; c++) {
       const key = colKeys[c];
@@ -81,7 +104,7 @@ export async function parseExcelToItineraryImport(file: File): Promise<Record<st
     }
 
     const dayNumRaw = toNum(o.dayNumber);
-    const dayNumber = dayNumRaw !== undefined ? Math.max(1, Math.floor(dayNumRaw)) : r;
+    const dayNumber = dayNumRaw !== undefined ? Math.max(1, Math.floor(dayNumRaw)) : days.length + 1;
 
     const titleRaw = o.title;
     const title =

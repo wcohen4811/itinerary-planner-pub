@@ -32,9 +32,29 @@ const blankForm: ClientForm = {
 
 function formatDate(val?: string | null) {
   if (!val) return '';
-  const d = new Date(val);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+  const raw = String(val);
+  const dateOnly = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+    const [y, m, d] = dateOnly.split('-').map(Number);
+    const utcDate = new Date(Date.UTC(y, m - 1, d));
+    const formatted = utcDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7374/ingest/115b4022-fc63-4f05-ae8e-f83ae3b7634b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d589d4'},body:JSON.stringify({sessionId:'d589d4',runId:'post-fix',hypothesisId:'H3',location:'web/src/pages/ClientsTab.tsx:formatDate',message:'Formatting travelStartDate as timezone-neutral date',data:{rawValue:val,dateOnly,formatted,timezoneOffsetMinutes:new Date().getTimezoneOffset()},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return formatted;
+  }
+  const fallback = new Date(raw);
+  if (Number.isNaN(fallback.getTime())) return '';
+  const formatted = fallback.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+  // #region agent log
+  fetch('http://127.0.0.1:7374/ingest/115b4022-fc63-4f05-ae8e-f83ae3b7634b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d589d4'},body:JSON.stringify({sessionId:'d589d4',runId:'post-fix',hypothesisId:'H3',location:'web/src/pages/ClientsTab.tsx:formatDate',message:'Formatting travelStartDate fallback path',data:{rawValue:val,parsedEpoch:fallback.getTime(),parsedIso:fallback.toISOString(),formatted,timezoneOffsetMinutes:new Date().getTimezoneOffset()},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  return formatted;
 }
 
 function formatStartDate(start?: string | null) {
