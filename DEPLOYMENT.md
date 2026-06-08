@@ -82,7 +82,9 @@ If you'd rather control exactly who can register (vs. anyone with a `@savacation
    - (`AUTH0_NAMESPACE`, `AUTH0_ROLES_CLAIM`, `ALLOWED_EMAIL_DOMAIN`, `NODE_VERSION`, `NODE_ENV` are preset in `render.yaml`.)
 4. `DATABASE_URL` is wired automatically from the managed database. Migrations run during the build (`buildCommand` ends with `npm run db:deploy`, i.e. `prisma migrate deploy`), so they apply on every deploy without a paid instance.
 
-> Render free web services sleep when idle; the first request after idle is slow. We run migrations in the `buildCommand` because Render's dedicated `preDeployCommand` requires a paid instance type. If you upgrade, move `npm run db:deploy` from `buildCommand` to `preDeployCommand` so it runs after build, just before traffic cuts over.
+> The database uses the paid `basic-256mb` tier (~$6/mo + storage) so data persists; the free tier expires after 30 days. The **web service** is still `plan: free`, so it sleeps when idle and the first request after idle is slow — upgrade the web service to a paid plan if you want it always-on.
+>
+> We run migrations in the `buildCommand` because Render's dedicated `preDeployCommand` requires a paid instance type. If you upgrade the web service, move `npm run db:deploy` from `buildCommand` to `preDeployCommand` so it runs after build, just before traffic cuts over.
 
 ---
 

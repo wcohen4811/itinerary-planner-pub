@@ -2,7 +2,10 @@
 # Create the services from this file via Render → "New +" → "Blueprint".
 databases:
   - name: itineraryplanner-db
-    plan: free
+    # Cheapest paid tier (~$6/mo) so the database persists (free expires after 30 days).
+    plan: basic-256mb
+    # Minimal disk to keep storage cost low ($0.30/GB/mo); increase in multiples of 5 GB anytime.
+    diskSizeGB: 5
     databaseName: itineraryplanner
     user: itineraryplanner
 
