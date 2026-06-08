@@ -1,0 +1,55 @@
+# Render blueprint: Express API + managed Postgres for the itinerary planner.
+# Create the services from this file via Render → "New +" → "Blueprint".
+databases:
+  - name: itineraryplanner-db
+    plan: free
+    databaseName: itineraryplanner
+    user: itineraryplanner
+
+services:
+  - type: web
+    name: itineraryplanner-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    # Build, then apply pending Prisma migrations. Migrations run here (rather than
+    # in preDeployCommand) because preDeployCommand requires a paid instance type;
+    # the build environment has DATABASE_URL available from the managed database.
+    buildCommand: npm install && npm run build && npm run db:deploy
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Pin a Node LTS so builds are reproducible.
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: itineraryplanner-db
+          property: connectionString
+      # Auth0 API (JWT validation). Set these in the Render dashboard.
+      - key: AUTH0_ISSUER_BASE_URL
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
+      # Namespace + roles claim must match the Auth0 Login Action and the frontend.
+      - key: AUTH0_NAMESPACE
+        value: https://itineraryplanner
+      - key: AUTH0_ROLES_CLAIM
+        value: https://itineraryplanner/roles
+      # Defense-in-depth domain restriction (authoritative check is the Auth0 Action).
+      - key: ALLOWED_EMAIL_DOMAIN
+        value: savacations.com
+      # Must equal the deployed Netlify origin (e.g. https://your-app.netlify.app).
+      - key: CORS_ORIGIN
+        sync: false
+      # Server-side only secrets.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_TEST_TO
+        value: delivered@resend.dev

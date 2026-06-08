@@ -4,6 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { apiToPrisma, prismaToApi } from '../utils/accommodation.js';
 import { getItineraryPricing } from '../services/pricing.js';
 import { cascadeItineraryDates, computeEndDate } from '../services/dates.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 export const itinerariesRouter = Router();
 
@@ -67,25 +68,19 @@ itinerariesRouter.post('/', async (req, res) => {
   const { title, startDate, accommodationLevel = '3', createdByName, description, messageTemplate, blankPricing } = req.body ?? {};
   if (!title) return res.status(400).json({ error: 'title required' });
   if (!startDate) return res.status(400).json({ error: 'startDate required (ISO string)' });
-  // Upsert a public user for unauthenticated usage
-  const publicUser = await prisma.user.upsert({
-    where: { providerId: 'public' },
-    update: {},
-    create: { provider: 'public', providerId: 'public', email: null },
-    select: { id: true },
-  });
+  const authorName = createdByName ?? req.appUser?.name ?? 'User';
 
   const it = await prisma.itinerary.create({
     data: {
-      userId: publicUser.id,
+      userId: req.appUser!.id,
       title,
       description: description ?? null,
       messageTemplate: messageTemplate ?? null,
       startDate: new Date(startDate),
       accommodationLevel: apiToPrisma(accommodationLevel),
       blankPricing: !!blankPricing,
-      createdByName: createdByName ?? 'Public',
-      updatedByName: createdByName ?? 'Public',
+      createdByName: authorName,
+      updatedByName: authorName,
       totalPriceUsd: 0,
     },
     include: { days: true },
@@ -113,6 +108,7 @@ itinerariesRouter.put('/:id', async (req, res) => {
   if (accommodationLevel) data.accommodationLevel = apiToPrisma(accommodationLevel);
   if (startDate) data.startDate = new Date(startDate);
   if (updatedByName) data.updatedByName = updatedByName;
+  else if (req.appUser?.name) data.updatedByName = req.appUser.name;
   const updated = await prisma.itinerary.update({ where: { id: it.id }, data, include: { days: true } });
   if (startDate) {
     await cascadeItineraryDates(updated.id);
@@ -136,8 +132,8 @@ itinerariesRouter.get('/:id', async (req, res) => {
   res.json({ itinerary: { ...it, endDate: end.toISOString() } });
 });
 
-// Delete an itinerary and its days
-itinerariesRouter.delete('/:id', async (req, res) => {
+// Delete an itinerary and its days (admin only)
+itinerariesRouter.delete('/:id', requireAdmin, async (req, res) => {
   const it = await prisma.itinerary.findFirst({ where: { id: req.params.id } });
   if (!it) return res.status(404).json({ error: 'Not found' });
 

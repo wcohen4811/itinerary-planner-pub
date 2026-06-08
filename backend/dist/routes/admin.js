@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { prisma } from '../db/prisma.js';
 import { TitleConflictError, importSingleItineraryRecord } from '../services/importItineraries.js';
 export const adminRouter = Router();
 // Import endpoint. Accepts:
@@ -19,12 +18,7 @@ adminRouter.post('/import-itineraries', async (req, res) => {
             : [];
     if (inputIts.length === 0)
         return res.status(400).json({ error: 'No itineraries provided' });
-    const publicUser = await prisma.user.upsert({
-        where: { providerId: 'public' },
-        update: {},
-        create: { provider: 'public', providerId: 'public', email: null },
-        select: { id: true },
-    });
+    const ownerUserId = req.appUser.id;
     const itineraryIds = [];
     const createdNewItinerary = [];
     try {
@@ -33,7 +27,7 @@ adminRouter.post('/import-itineraries', async (req, res) => {
             const resolution = payload.resolution ?? it.resolution;
             const mergeIntoItineraryId = payload.mergeIntoItineraryId ?? it.mergeIntoItineraryId;
             const result = await importSingleItineraryRecord({
-                publicUserId: publicUser.id,
+                publicUserId: ownerUserId,
                 it,
                 resolution: resolution,
                 mergeIntoItineraryId: mergeIntoItineraryId ?? null,

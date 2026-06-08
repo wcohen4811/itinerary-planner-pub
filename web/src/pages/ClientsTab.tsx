@@ -43,17 +43,11 @@ function formatDate(val?: string | null) {
       year: 'numeric',
       timeZone: 'UTC',
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7374/ingest/115b4022-fc63-4f05-ae8e-f83ae3b7634b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d589d4'},body:JSON.stringify({sessionId:'d589d4',runId:'post-fix',hypothesisId:'H3',location:'web/src/pages/ClientsTab.tsx:formatDate',message:'Formatting travelStartDate as timezone-neutral date',data:{rawValue:val,dateOnly,formatted,timezoneOffsetMinutes:new Date().getTimezoneOffset()},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return formatted;
   }
   const fallback = new Date(raw);
   if (Number.isNaN(fallback.getTime())) return '';
   const formatted = fallback.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
-  // #region agent log
-  fetch('http://127.0.0.1:7374/ingest/115b4022-fc63-4f05-ae8e-f83ae3b7634b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d589d4'},body:JSON.stringify({sessionId:'d589d4',runId:'post-fix',hypothesisId:'H3',location:'web/src/pages/ClientsTab.tsx:formatDate',message:'Formatting travelStartDate fallback path',data:{rawValue:val,parsedEpoch:fallback.getTime(),parsedIso:fallback.toISOString(),formatted,timezoneOffsetMinutes:new Date().getTimezoneOffset()},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return formatted;
 }
 

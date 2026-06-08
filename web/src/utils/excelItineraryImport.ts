@@ -54,7 +54,7 @@ export async function parseExcelToItineraryImport(file: File): Promise<Record<st
   const parsed = await readXlsxFile(file);
   const rows =
     Array.isArray(parsed) && parsed.length > 0 && Array.isArray(parsed[0])
-      ? (parsed as unknown[][])
+      ? (parsed as unknown as unknown[][])
       : Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && 'data' in (parsed[0] as Record<string, unknown>) && Array.isArray((parsed[0] as { data?: unknown }).data)
         ? ((parsed[0] as { data: unknown[][] }).data ?? [])
         : [];

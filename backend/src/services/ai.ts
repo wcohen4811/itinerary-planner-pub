@@ -78,6 +78,26 @@ export async function generateItinerary(params: GenerateParams): Promise<DayCrea
   }
 }
 
+/**
+ * General-purpose authenticated text completion used by future AI features.
+ * Keeps the OpenAI key fully server-side. Throws if no key is configured.
+ */
+export async function completeText(params: { prompt: string; system?: string; maxTokens?: number }): Promise<string> {
+  if (!haveOpenAI()) {
+    throw new Error('OPENAI_API_KEY not configured');
+  }
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const response = await client.responses.create({
+    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+    input: [
+      ...(params.system ? [{ role: 'system' as const, content: params.system }] : []),
+      { role: 'user' as const, content: params.prompt },
+    ],
+    max_output_tokens: Math.min(2000, Math.max(1, params.maxTokens ?? 800)),
+  } as any);
+  return String((response as any)?.output_text ?? '').trim();
+}
+
 function fallbackGenerate(params: GenerateParams): DayCreate[] {
   const days: DayCreate[] = [];
   for (let i = 1; i <= params.numDays; i += 1) {

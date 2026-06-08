@@ -1,8 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import eoc from 'express-openid-connect';
-const { auth } = eoc as any;
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { healthRouter } from './routes/health.js';
 import { pingRouter } from './routes/ping.js';
 import { daysRouter } from './routes/days.js';
@@ -18,56 +17,35 @@ import { pricingTemplatesRouter } from './routes/pricingTemplates.js';
 import { proposalsRouter } from './routes/proposals.js';
 import { clientsRouter } from './routes/clients.js';
 import { proposalsEmailRouter } from './routes/proposalsEmail.js';
+import { requireAuth, attachUser, requireAdmin } from './middleware/auth.js';
 
 export function createServer() {
   const app = express();
-  // CORS with credentials for frontend dev domain(s)
-  const corsOrigins = (process.env.CORS_ORIGIN ?? '').split(',').filter(Boolean);
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // Security headers
+  app.use(helmet());
+
+  // CORS: lock to explicit origins in production; allow all only in local dev.
+  const corsOrigins = (process.env.CORS_ORIGIN ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   app.use(
     cors({
-      origin: corsOrigins.length > 0 ? corsOrigins : true,
+      origin: corsOrigins.length > 0 ? corsOrigins : isProd ? false : true,
       credentials: true,
     }),
   );
-  app.use(cookieParser());
+
   app.use(express.json({ limit: '1mb' }));
 
-  // Optional Auth0 wiring (skips if env is not set)
-  const haveAuth0 =
-    !!process.env.AUTH0_SECRET &&
-    !!process.env.AUTH0_BASE_URL &&
-    !!process.env.AUTH0_CLIENT_ID &&
-    !!process.env.AUTH0_ISSUER_BASE_URL;
-  if (haveAuth0) {
-    app.use(
-      auth({
-        authRequired: false,
-        auth0Logout: true,
-        secret: process.env.AUTH0_SECRET!,
-        baseURL: process.env.AUTH0_BASE_URL!,
-        clientID: process.env.AUTH0_CLIENT_ID!,
-        issuerBaseURL: process.env.AUTH0_ISSUER_BASE_URL!,
-      }),
-    );
-  }
+  // Rate limiting
+  const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 600, standardHeaders: true, legacyHeaders: false });
+  const aiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
+  const emailLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+  app.use(globalLimiter);
 
+  // Public, unauthenticated endpoints (uptime checks + root info)
   app.use('/health', healthRouter);
   app.use('/ping', pingRouter);
-  app.use('/days', daysRouter);
-  app.use('/ai', aiRouter);
-  app.use('/itineraries', itinerariesRouter);
-  app.use('/itineraries', itineraryDaysRouter);
-  app.use('/providers', providersRouter);
-  app.use('/destinations', destinationsRouter);
-  app.use('/admin', adminRouter);
-  app.use('/itineraries', dayPricingRouter);
-  app.use('/itineraries', pricingLineItemsRouter);
-  app.use('/pricing', pricingTemplatesRouter);
-  app.use('/proposals', proposalsRouter);
-  app.use('/proposals', proposalsEmailRouter);
-  app.use('/clients', clientsRouter);
-
-  // Root info
   app.get('/', (req: Request, res: Response) => {
     res.json({
       name: 'itineraryplanner-backend',
@@ -77,18 +55,11 @@ export function createServer() {
         '/ping',
         '/days',
         '/ai/itinerary',
+        '/ai/complete',
         '/itineraries',
-        '/itineraries/:itineraryId/days',
-        '/itineraries/:itineraryId/days/clone',
-        '/itineraries/library/days',
         '/providers',
-        '/providers/:id/destinations',
-        '/destinations/:id/*',
+        '/destinations',
         '/admin/import-itineraries',
-        '/itineraries/:itineraryId/pricing/levels/:level',
-        '/itineraries/:itineraryId/pricing/levels/:level/days/:dayId',
-        '/itineraries/:itineraryId/pricing/line-items',
-        '/itineraries/:itineraryId/days/:dayId/pricing/items',
         '/pricing/templates',
         '/proposals/drafts',
         '/proposals/send-email',
@@ -97,13 +68,33 @@ export function createServer() {
     });
   });
 
-  // Error handler
+  // Everything below requires a valid Auth0 access token.
+  app.use(requireAuth, attachUser);
+
+  app.use('/days', daysRouter);
+  app.use('/ai', aiLimiter, aiRouter);
+  app.use('/itineraries', itinerariesRouter);
+  app.use('/itineraries', itineraryDaysRouter);
+  app.use('/providers', providersRouter);
+  app.use('/destinations', destinationsRouter);
+  app.use('/admin', requireAdmin, adminRouter);
+  app.use('/itineraries', dayPricingRouter);
+  app.use('/itineraries', pricingLineItemsRouter);
+  app.use('/pricing', pricingTemplatesRouter);
+  app.use('/proposals/send-email', emailLimiter);
+  app.use('/proposals', proposalsRouter);
+  app.use('/proposals', proposalsEmailRouter);
+  app.use('/clients', clientsRouter);
+
+  // Error handler. Surfaces auth (401/403) and validation (4xx) statuses; hides
+  // internal error details in production.
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    const message = err?.message ?? 'Internal Server Error';
-    res.status(500).json({ error: message });
+    const status = (err as { status?: number; statusCode?: number })?.status
+      ?? (err as { statusCode?: number })?.statusCode
+      ?? 500;
+    const message = status >= 500 && isProd ? 'Internal Server Error' : (err?.message ?? 'Internal Server Error');
+    res.status(status).json({ error: message });
   });
 
   return app;
 }
-
-

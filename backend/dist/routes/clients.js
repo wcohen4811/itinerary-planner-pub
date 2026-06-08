@@ -1,7 +1,23 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '../db/prisma.js';
 import { apiToPrisma, prismaToApi } from '../utils/accommodation.js';
 export const clientsRouter = Router();
+// Type/shape guard for client mutations. Strips unknown keys; downstream code
+// performs trimming/normalisation. Kept permissive to match existing clients.
+const ClientInputSchema = z
+    .object({
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    email: z.union([z.string(), z.null()]).optional(),
+    itineraryId: z.union([z.string(), z.null()]).optional(),
+    passengers: z.union([z.number(), z.string()]).optional(),
+    accommodationLevel: z.string().optional(),
+    occupancy: z.string().optional(),
+    notes: z.union([z.string(), z.null()]).optional(),
+    travelStartDate: z.union([z.string(), z.null()]).optional(),
+})
+    .strip();
 function toClientResponse(c) {
     return {
         ...c,
@@ -35,7 +51,10 @@ clientsRouter.get('/', async (req, res) => {
     res.json({ clients: clients.map(toClientResponse) });
 });
 clientsRouter.post('/', async (req, res) => {
-    const body = req.body ?? {};
+    const parsed = ClientInputSchema.safeParse(req.body ?? {});
+    if (!parsed.success)
+        return res.status(400).json({ error: 'Invalid client payload' });
+    const body = parsed.data;
     const firstName = String(body.firstName ?? '').trim();
     const lastName = String(body.lastName ?? '').trim();
     const email = body.email ? String(body.email).trim() : null;
@@ -44,7 +63,7 @@ clientsRouter.post('/', async (req, res) => {
     const accommodationLevel = body.accommodationLevel ? apiToPrisma(body.accommodationLevel) : 'three';
     const notes = body.notes !== undefined ? String(body.notes) : null;
     const travelStartDate = body.travelStartDate ? new Date(body.travelStartDate) : null;
-    const occupancy = body.occupancy ?? 'double';
+    const occupancy = (body.occupancy ?? 'double');
     if (!firstName || !lastName)
         return res.status(400).json({ error: 'firstName and lastName required' });
     const client = await prisma.client.create({
@@ -65,7 +84,10 @@ clientsRouter.post('/', async (req, res) => {
 });
 clientsRouter.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const body = req.body ?? {};
+    const parsed = ClientInputSchema.safeParse(req.body ?? {});
+    if (!parsed.success)
+        return res.status(400).json({ error: 'Invalid client payload' });
+    const body = parsed.data;
     const data = {};
     if (body.firstName !== undefined)
         data.firstName = String(body.firstName).trim();

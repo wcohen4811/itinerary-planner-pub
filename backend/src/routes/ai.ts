@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { DayCreateSchema } from '../types/day.js';
-import { generateItinerary } from '../services/ai.js';
+import { generateItinerary, completeText } from '../services/ai.js';
 import { dayStore } from '../store/inMemoryStore.js';
 import { prisma } from '../db/prisma.js';
 import type { Prisma } from '@prisma/client';
@@ -28,17 +28,10 @@ aiRouter.post('/itinerary', async (req, res) => {
   }
   try {
     const result = await generateItinerary(parse.data);
-    // Persist itinerary + days in DB using a public user for now
-    const publicUser = await prisma.user.upsert({
-      where: { providerId: 'public' },
-      update: {},
-      create: { provider: 'public', providerId: 'public', email: null },
-      select: { id: true },
-    });
 
     const itinerary = await prisma.itinerary.create({
       data: {
-        userId: publicUser.id,
+        userId: req.appUser!.id,
         title: parse.data.title ?? `${parse.data.destination} Trip`,
         startDate: new Date(),
         accommodationLevel: apiToPrisma(parse.data.accommodationLevel ?? '4'),
@@ -86,6 +79,27 @@ aiRouter.post('/itinerary', async (req, res) => {
     return res.status(201).json({ days: created });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to generate itinerary';
+    res.status(500).json({ error: message });
+  }
+});
+
+const CompleteRequest = z.object({
+  prompt: z.string().min(1).max(8000),
+  system: z.string().max(2000).optional(),
+  maxTokens: z.number().int().min(1).max(2000).optional(),
+});
+
+// Reusable authenticated AI completion endpoint for future features.
+aiRouter.post('/complete', async (req, res) => {
+  const parse = CompleteRequest.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Invalid request', details: parse.error.flatten() });
+  }
+  try {
+    const text = await completeText(parse.data);
+    res.json({ text });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'AI request failed';
     res.status(500).json({ error: message });
   }
 });

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDashboardBackend } from '../services/dashboard';
 import { ImportTitleConflictError, type ImportTitleConflict, type ItineraryMessageTemplate } from '../api/client';
 import StitchShell from '../components/StitchShell';
+import { useAuth } from '../auth/auth';
 
 function applyImportResolution(
   base: Record<string, unknown>,
@@ -67,6 +68,47 @@ function WarningModal({
   );
 }
 
+function AutoGrowTextarea({
+  value,
+  onChange,
+  className,
+  placeholder,
+  minRows = 2,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  placeholder?: string;
+  minRows?: number;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const resize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  useEffect(() => {
+    resize();
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      placeholder={placeholder}
+      rows={minRows}
+      value={value}
+      onChange={(e) => {
+        onChange(e.target.value);
+        resize();
+      }}
+    />
+  );
+}
+
 function PricingTableRow({
   item,
   badgeClassName,
@@ -102,87 +144,6 @@ function PricingTableRow({
       <td className="px-6 py-3">
         <input
           className="w-full bg-transparent border-none focus:ring-0 p-0 text-[#111418] dark:text-white font-medium placeholder-gray-400"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur();
-            }
-          }}
-        />
-      </td>
-      <td className="px-6 py-3">
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClassName}`}>
-          {badgeLabel}
-        </span>
-      </td>
-      <td className="px-6 py-3">
-        <div className="flex items-center justify-end gap-1">
-          <span className="text-gray-400">$</span>
-          <input
-            className="w-24 text-right bg-transparent border border-gray-200 dark:border-gray-700 rounded px-2 py-1 focus:border-primary focus:ring-1 focus:ring-primary text-[#111418] dark:text-white font-bold"
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            onBlur={commit}
-          />
-        </div>
-      </td>
-      <td className="px-4 py-3 text-center">
-        <button className="text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" onClick={onDelete}>
-          <span className="material-symbols-outlined text-[20px]">delete</span>
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-function PricingDayRow({
-  dayLabel,
-  showDayLabel,
-  item,
-  badgeClassName,
-  badgeLabel,
-  onSave,
-  onDelete,
-}: {
-  dayLabel: string;
-  showDayLabel: boolean;
-  item: { id: string; name: string; amountUsd: number };
-  badgeClassName: string;
-  badgeLabel: string;
-  onSave: (patch: { name: string; amountUsd: number }) => void;
-  onDelete: () => void;
-}) {
-  const [name, setName] = useState(item.name);
-  const [amount, setAmount] = useState(String(item.amountUsd));
-
-  useEffect(() => {
-    setName(item.name);
-    setAmount(String(item.amountUsd));
-  }, [item.id, item.name, item.amountUsd]);
-
-  const toUsd = (val: string) => Math.max(0, Math.floor(Number(val) || 0));
-  const commit = () => {
-    const next = name.trim() || item.name;
-    const nextAmount = toUsd(amount);
-    if (next !== item.name || nextAmount !== item.amountUsd) {
-      onSave({ name: next, amountUsd: nextAmount });
-    }
-  };
-
-  return (
-    <tr className="group hover:bg-gray-50 dark:hover:bg-[#1e2a36] transition-colors">
-      <td className="px-6 py-3">
-        <span className={`font-semibold ${showDayLabel ? 'text-gray-500 dark:text-gray-400' : 'text-gray-300 dark:text-gray-600'}`}>
-          {showDayLabel ? dayLabel : '"'}
-        </span>
-      </td>
-      <td className="px-6 py-3">
-        <input
-          className="w-full bg-transparent border-none focus:ring-0 p-0 text-[#111418] dark:text-white font-medium"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -795,10 +756,12 @@ function TemplateModal({
 
 export default function Dashboard() {
   const b = useDashboardBackend();
+  const { isAdmin } = useAuth();
   const selected = b.getSelected();
   const [showWarning, setShowWarning] = useState(false);
   const [crmView, setCrmView] = useState<'itineraries' | 'pricing-library'>('itineraries');
-  const [view, setView] = useState<'detail' | 'pricing'>('detail');
+  const [pricingFlips, setPricingFlips] = useState<Record<string, boolean>>({});
+  const [pricingPanelOpen, setPricingPanelOpen] = useState(false);
   const [isListOpen, setIsListOpen] = useState(true);
   const [tempTitle, setTempTitle] = useState('');
   const [descValue, setDescValue] = useState('');
@@ -833,8 +796,13 @@ export default function Dashboard() {
   const [templateName, setTemplateName] = useState('');
   const [templateKind, setTemplateKind] = useState<'hotel' | 'activity' | 'custom' | 'general' | 'fee'>('custom');
   const [templateAmount, setTemplateAmount] = useState('0');
-  const [coverImagesById, setCoverImagesById] = useState<Record<string, string>>({});
-  const coverInputRef = useRef<HTMLInputElement>(null);
+  const [pendingScrollDayId, setPendingScrollDayId] = useState<string | null>(null);
+  const dayRefs = useRef<Record<string, HTMLElement | null>>({});
+  const [dayActionConfirm, setDayActionConfirm] = useState<{
+    type: 'move' | 'delete';
+    dayId: string;
+    dir?: -1 | 1;
+  } | null>(null);
   const greetingRef = useRef<HTMLInputElement>(null);
   const generalMessageRef = useRef<HTMLTextAreaElement>(null);
   const keyDetailsRef = useRef<HTMLTextAreaElement>(null);
@@ -844,6 +812,16 @@ export default function Dashboard() {
   const exclusionsRef = useRef<HTMLTextAreaElement>(null);
   const discountLabelRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const discountMessageRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+
+  const allFlipped = !!selected && selected.days.length > 0 && selected.days.every((d) => pricingFlips[d.id]);
+  const flipAll = (toPricing: boolean) => {
+    if (!selected) return;
+    setPricingFlips((prev) => {
+      const next = { ...prev };
+      for (const d of selected.days) next[d.id] = toPricing;
+      return next;
+    });
+  };
 
   async function runImportWithResolution(
     resolution: 'merge_into_existing' | 'create_new',
@@ -983,9 +961,50 @@ export default function Dashboard() {
   }, [messageTemplateOpen, selected?.id]);
 
   useEffect(() => {
-    if (!selected?.id || !selected.coverImageBase64) return;
-    setCoverImagesById((prev) => (prev[selected.id] ? prev : { ...prev, [selected.id]: selected.coverImageBase64! }));
-  }, [selected?.id, selected?.coverImageBase64]);
+    if (!pendingScrollDayId) return;
+    const el = dayRefs.current[pendingScrollDayId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setPendingScrollDayId(null);
+    }
+  }, [pendingScrollDayId, selected?.days.length]);
+
+  const handleAddDay = () => {
+    const id = b.addDay();
+    if (id) setPendingScrollDayId(id);
+  };
+
+  const isEdgeDay = (dayId: string) => {
+    if (!selected) return false;
+    const idx = selected.days.findIndex((d) => d.id === dayId);
+    return idx === 0 || idx === selected.days.length - 1;
+  };
+
+  const requestMoveDay = (dayId: string, dir: -1 | 1) => {
+    if (isEdgeDay(dayId)) {
+      setDayActionConfirm({ type: 'move', dayId, dir });
+    } else {
+      b.moveDay(dayId, dir);
+    }
+  };
+
+  const requestDeleteDay = (dayId: string) => {
+    if (isEdgeDay(dayId)) {
+      setDayActionConfirm({ type: 'delete', dayId });
+    } else {
+      b.deleteDay(dayId);
+    }
+  };
+
+  const confirmDayAction = () => {
+    if (!dayActionConfirm) return;
+    if (dayActionConfirm.type === 'move' && dayActionConfirm.dir) {
+      b.moveDay(dayActionConfirm.dayId, dayActionConfirm.dir);
+    } else if (dayActionConfirm.type === 'delete') {
+      b.deleteDay(dayActionConfirm.dayId);
+    }
+    setDayActionConfirm(null);
+  };
 
   useEffect(() => {
     if (crmView === 'pricing-library') {
@@ -1016,16 +1035,8 @@ export default function Dashboard() {
   const feesSubtotalUsd = feeItems.reduce((s, i) => s + i.amountUsd, 0);
   const daySubtotalUsd = b.pricingDayItems.reduce((s, d) => s + d.items.reduce((t, i) => t + i.amountUsd, 0), 0);
   const totalPriceUsd = globalSubtotalUsd + feesSubtotalUsd + daySubtotalUsd;
-  const dayCostRows = b.pricingDayItems.flatMap((d) =>
-    d.items.map((item, idx) => ({
-      dayId: d.dayId,
-      dayNumber: d.dayNumber,
-      item,
-      showDay: idx === 0,
-    })),
-  );
+  const dayItemsById = new Map(b.pricingDayItems.map((d) => [d.dayId, d.items]));
   const durationLabel = selected ? `${selected.days.length} Days / ${Math.max(selected.days.length - 1, 0)} Nights` : '';
-  const selectedCover = selected ? coverImagesById[selected.id] || selected.coverImageBase64 || '' : '';
 
   const mainContent = (() => {
     if (crmView === 'pricing-library') {
@@ -1175,45 +1186,48 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:block">
-              <div className="flex bg-[#f0f2f4] dark:bg-[#24303f] p-1 rounded-lg select-none">
-                <button
-                  className={`px-6 py-1.5 rounded-md text-sm font-medium transition-colors focus:outline-none ${
-                    view === 'detail'
-                      ? 'bg-white dark:bg-gray-600 text-primary dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10 cursor-default'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-[#111418] dark:hover:text-white'
-                  }`}
-                  onClick={() => setView('detail')}
-                >
-                  Details
-                </button>
-                <button
-                  className={`px-6 py-1.5 rounded-md text-sm font-medium transition-colors focus:outline-none ${
-                    view === 'pricing'
-                      ? 'bg-white dark:bg-gray-600 text-primary dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10 cursor-default'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-[#111418] dark:hover:text-white'
-                  }`}
-                  onClick={() => setView('pricing')}
-                >
-                  Pricing
-                </button>
-              </div>
-            </div>
             <div className="flex items-center gap-3 shrink-0">
-              <button
-                className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                title="Delete Itinerary"
-                onClick={async () => {
-                  const ok = window.confirm(
-                    `Delete itinerary "${selected.title}"? This will remove all days and cannot be undone.`,
-                  );
-                  if (!ok) return;
-                  await b.deleteItinerary(selected.id);
-                }}
+              {isAdmin ? (
+                <>
+                  <button
+                    className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                    title="Delete Itinerary"
+                    onClick={async () => {
+                      const ok = window.confirm(
+                        `Delete itinerary "${selected.title}"? This will remove all days and cannot be undone.`,
+                      );
+                      if (!ok) return;
+                      await b.deleteItinerary(selected.id);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                  </button>
+                  <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1"></div>
+                </>
+              ) : null}
+              <span
+                className={`flex items-center gap-1.5 text-xs font-medium mr-1 ${
+                  b.autosaveStatus === 'error' ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'
+                }`}
+                title="Edits save automatically"
               >
-                <span className="material-symbols-outlined text-[20px]">delete</span>
-              </button>
-              <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1"></div>
+                {b.autosaveStatus === 'saving' ? (
+                  <>
+                    <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                    Saving…
+                  </>
+                ) : b.autosaveStatus === 'saved' ? (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">cloud_done</span>
+                    Saved
+                  </>
+                ) : b.autosaveStatus === 'error' ? (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">cloud_off</span>
+                    Save failed
+                  </>
+                ) : null}
+              </span>
               <button
                 className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-all"
                 onClick={() => {
@@ -1244,39 +1258,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {view === 'detail' ? (
+        {(
           <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 scroll-smooth">
-            <section className="bg-white dark:bg-background-dark rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="h-32 bg-gray-200 w-full relative">
-                <div
-                  className="absolute inset-0 bg-center bg-cover"
-                  style={{
-                    backgroundImage: `url("${
-                      selectedCover ||
-                      'https://lh3.googleusercontent.com/aida-public/AB6AXuABAZr4_vXYiZQZR0xWVJffcPVXltiS_FhAj4tOiUTwNro7RIS4Tb4wD2Hix2ERndxF8ruAyjye35XzYcmNrh9nO-apjiW9nvaYJDzmtOy0UsX5sjoRRLh-xZNSBgWRZMK1oYyWlA0MdvswsjHVJG8sT-bJ940VZ__QfO-FYMruOuFHExrhARvQaz5K7Smrs-Wlb_rb1bWgjvk0f-8bdlDQqE8I1ORFljcHb7lEWvNDsBACQadnz9R5QaSiYMRBfncq6ghpJkAE4RM'
-                    }")`,
-                  }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                </div>
-                <button
-                  className="absolute bottom-3 right-3 bg-white/90 dark:bg-black/80 hover:bg-white dark:hover:bg-black text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm backdrop-blur-sm transition-colors flex items-center gap-1"
-                  onClick={() => coverInputRef.current?.click()}
-                >
-                  <span className="material-symbols-outlined text-[14px]">edit</span> Change Cover
-                </button>
-              </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-1 gap-6">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Duration</label>
-                  <div className="flex items-center bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-700">
-                    <span className="material-symbols-outlined text-gray-400 mr-2 text-[18px]">schedule</span>
-                    <input className="bg-transparent border-none text-sm font-medium text-gray-900 dark:text-white w-full p-0 focus:ring-0" type="text" value={durationLabel} readOnly />
-                  </div>
-                </div>
-              </div>
-            </section>
-
             <section className="bg-white dark:bg-background-dark rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">General Information</h3>
@@ -1290,57 +1273,10 @@ export default function Dashboard() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Trip Type</label>
-                  <div className="relative">
-                    <select className="w-full bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 rounded-lg focus:ring-primary focus:border-primary appearance-none py-2.5 pl-3 pr-10">
-                      <option>Vacation Package</option>
-                      <option>Honeymoon</option>
-                      <option>Group Tour</option>
-                      <option>Business Trip</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                      <span className="material-symbols-outlined text-[20px]">expand_more</span>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Region</label>
-                  <div className="relative">
-                    <select className="w-full bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 rounded-lg focus:ring-primary focus:border-primary appearance-none py-2.5 pl-3 pr-10">
-                      <option>Western Europe</option>
-                      <option>Southeast Asia</option>
-                      <option>North America</option>
-                      <option>South America</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                      <span className="material-symbols-outlined text-[20px]">public</span>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Difficulty</label>
-                  <div className="relative">
-                    <select className="w-full bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-900 dark:text-white border-gray-200 dark:border-gray-700 rounded-lg focus:ring-primary focus:border-primary appearance-none py-2.5 pl-3 pr-10">
-                      <option>Easy / Leisure</option>
-                      <option>Moderate</option>
-                      <option>Challenging</option>
-                      <option>Extreme</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                      <span className="material-symbols-outlined text-[20px]">hiking</span>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Tags</label>
-                  <div className="flex flex-wrap items-center gap-2 p-2 w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg min-h-[42px]">
-                    <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded flex items-center gap-1">
-                      Luxury
-                      <button className="hover:text-blue-900 dark:hover:text-blue-100">
-                        <span className="material-symbols-outlined text-[14px]">close</span>
-                      </button>
-                    </span>
-                    <input className="bg-transparent border-none p-0 text-sm w-20 focus:ring-0 placeholder:text-gray-400" placeholder="Add tag..." type="text" />
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Duration</label>
+                  <div className="flex items-center bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2.5 border border-gray-200 dark:border-gray-700">
+                    <span className="material-symbols-outlined text-gray-400 mr-2 text-[18px]">schedule</span>
+                    <input className="bg-transparent border-none text-sm font-medium text-gray-900 dark:text-white w-full p-0 focus:ring-0" type="text" value={durationLabel} readOnly />
                   </div>
                 </div>
               </div>
@@ -1371,9 +1307,218 @@ export default function Dashboard() {
               </div>
             </section>
 
+            <section className="bg-white dark:bg-[#1A2633] rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-[#1e2a36] transition-colors"
+                onClick={() => setPricingPanelOpen((o) => !o)}
+                aria-expanded={pricingPanelOpen}
+              >
+                <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">payments</span>
+                  Pricing Overview
+                </h3>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Total / person:{' '}
+                    <span className="font-bold text-[#111418] dark:text-white">${totalPriceUsd.toLocaleString()}</span>
+                  </span>
+                  <span className="material-symbols-outlined text-gray-400 transition-transform" style={{ transform: pricingPanelOpen ? 'rotate(180deg)' : 'none' }}>
+                    expand_more
+                  </span>
+                </div>
+              </button>
+              {pricingPanelOpen ? (
+                <div className="border-t border-gray-200 dark:border-gray-800 p-6 flex flex-col gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1 md:col-span-2 flex flex-col justify-center gap-2 p-6 bg-white dark:bg-[#1A2633] rounded-xl border border-[#e5e7eb] dark:border-gray-800 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary">tune</span>
+                          Matrix Controls
+                        </h3>
+                        {isAdmin ? (
+                          <button
+                            className="inline-flex items-center gap-2 rounded-lg border border-[#dbe0e6] dark:border-gray-700 px-3 py-2 text-sm font-medium text-[#111418] dark:text-gray-100 hover:bg-[#f7f8fa] dark:hover:bg-gray-800 transition-colors"
+                            onClick={() => {
+                              setImpJson(null);
+                              setImpError(null);
+                              setImportTitleConflict(null);
+                              setImpOpen(true);
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">upload</span>
+                            Import Pricing
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <div className="flex bg-[#f0f2f4] dark:bg-[#24303f] p-1 rounded-lg">
+                          {(['3', '4', '5', 'deluxe'] as const).map((lv) => (
+                            <label className="cursor-pointer" key={lv}>
+                              <input
+                                className="peer sr-only"
+                                name="level"
+                                type="radio"
+                                checked={b.pricingLevel === lv}
+                                onChange={() => b.setPricingLevel(lv)}
+                              />
+                              <span className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 transition-all hover:bg-white/50 dark:hover:bg-gray-700 peer-checked:bg-white dark:peer-checked:bg-gray-600 peer-checked:text-primary peer-checked:shadow-sm flex items-center gap-2">
+                                {lv === 'deluxe' ? 'Deluxe' : `${lv} Star`}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex bg-[#f0f2f4] dark:bg-[#24303f] p-1 rounded-lg">
+                          {(['single', 'double', 'triple'] as const).map((occ) => (
+                            <label className="cursor-pointer" key={occ}>
+                              <input
+                                className="peer sr-only"
+                                name="occupancy"
+                                type="radio"
+                                checked={b.pricingOccupancy === occ}
+                                onChange={() => b.setPricingOccupancy(occ)}
+                              />
+                              <span className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 transition-all hover:bg-white/50 dark:hover:bg-gray-700 peer-checked:bg-white dark:peer-checked:bg-gray-600 peer-checked:text-primary peer-checked:shadow-sm flex items-center gap-2">
+                                {occ.charAt(0).toUpperCase() + occ.slice(1)}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-span-1 flex flex-col justify-between rounded-xl p-6 bg-primary text-white shadow-lg shadow-primary/20 relative overflow-hidden">
+                      <div className="absolute -right-6 -top-6 size-32 bg-white/10 rounded-full blur-2xl"></div>
+                      <div className="relative z-10">
+                        <p className="text-primary-50 text-sm font-medium leading-normal mb-1">Total Price Per Person</p>
+                        <div className="flex items-baseline gap-1">
+                          <p className="text-4xl font-bold leading-tight tracking-tight">${totalPriceUsd.toLocaleString()}</p>
+                          <span className="text-lg opacity-80">.00</span>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-white/20 flex justify-between items-center relative z-10">
+                        <span className="text-xs font-medium text-primary-100 uppercase tracking-wider">Day Subtotal</span>
+                        <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded text-sm">${daySubtotalUsd.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight">Global Costs</h3>
+                      <button
+                        className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                        onClick={() => {
+                          setLineModal({ mode: 'general' });
+                          setLineName('');
+                          setLineAmount('0');
+                          setLineSaveTemplate(false);
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                        Add Item
+                      </button>
+                    </div>
+                    <div className="overflow-hidden rounded-xl border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1A2633] shadow-sm">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-[#f0f2f4] dark:bg-[#24303f] text-[#111418] dark:text-white font-medium border-b border-[#dbe0e6] dark:border-gray-700">
+                          <tr>
+                            <th className="px-6 py-4 w-1/2">Item Name</th>
+                            <th className="px-6 py-4">Category</th>
+                            <th className="px-6 py-4 text-right">Cost (USD)</th>
+                            <th className="px-4 py-4 w-[60px]"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#dbe0e6] dark:divide-gray-800">
+                          {baseGeneralItems.map((item) => (
+                            <PricingTableRow
+                              key={item.id}
+                              item={item}
+                              badgeClassName={kindBadgeClass(item.kind)}
+                              badgeLabel={item.kind}
+                              onSave={(patch) => b.updateGeneralLineItem(item.id, patch)}
+                              onDelete={() => b.deleteGeneralLineItem(item.id)}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="bg-[#fcfdfd] dark:bg-[#1A2633] p-3 border-t border-[#dbe0e6] dark:border-gray-700 flex justify-end">
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Subtotal Global: <span className="font-bold text-[#111418] dark:text-white ml-1">${globalSubtotalUsd}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight">Additional Fees</h3>
+                      <button
+                        className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                        onClick={() => {
+                          setLineModal({ mode: 'fee' });
+                          setLineName('');
+                          setLineAmount('0');
+                          setLineSaveTemplate(false);
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                        Add Fee
+                      </button>
+                    </div>
+                    <div className="overflow-hidden rounded-xl border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1A2633] shadow-sm">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-[#f0f2f4] dark:bg-[#24303f] text-[#111418] dark:text-white font-medium border-b border-[#dbe0e6] dark:border-gray-700">
+                          <tr>
+                            <th className="px-6 py-4 w-1/2">Item Name</th>
+                            <th className="px-6 py-4">Category</th>
+                            <th className="px-6 py-4 text-right">Cost (USD)</th>
+                            <th className="px-4 py-4 w-[60px]"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#dbe0e6] dark:divide-gray-800">
+                          {feeItems.map((item) => (
+                            <PricingTableRow
+                              key={item.id}
+                              item={item}
+                              badgeClassName={kindBadgeClass(item.kind)}
+                              badgeLabel={item.kind}
+                              onSave={(patch) => b.updateGeneralLineItem(item.id, patch)}
+                              onDelete={() => b.deleteGeneralLineItem(item.id)}
+                            />
+                          ))}
+                          {feeItems.length === 0 ? (
+                            <tr>
+                              <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400" colSpan={4}>
+                                No additional fees added yet.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                      <div className="bg-[#fcfdfd] dark:bg-[#1A2633] p-3 border-t border-[#dbe0e6] dark:border-gray-700 flex justify-end">
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Subtotal Fees: <span className="font-bold text-[#111418] dark:text-white ml-1">${feesSubtotalUsd}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Daily Itinerary</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Daily Itinerary</h3>
+                  <button
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#f0f2f4] dark:bg-[#24303f] text-gray-600 dark:text-gray-300 hover:text-[#111418] dark:hover:text-white hover:bg-[#e7eaee] dark:hover:bg-[#2c3a4b] transition-colors select-none"
+                    onClick={() => flipAll(!allFlipped)}
+                    title={allFlipped ? 'Show details for every day' : 'Show pricing for every day'}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">flip</span>
+                    {allFlipped ? 'Show All Details' : 'Show All Pricing'}
+                  </button>
+                </div>
                 <div className="flex gap-2">
                   <button
                     className="text-xs font-semibold text-primary hover:underline"
@@ -1386,56 +1531,94 @@ export default function Dashboard() {
                     Add Saved Day
                   </button>
                   <span className="text-gray-300">|</span>
-                  <button className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" onClick={() => b.addDay()}>
+                  <button className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" onClick={handleAddDay}>
                     Add Day
                   </button>
                 </div>
               </div>
 
-              {selected.days.map((day, idx) => (
+              {selected.days.map((day, idx) => {
+                const flipped = !!pricingFlips[day.id];
+                const dayItems = dayItemsById.get(day.id) ?? [];
+                const daySubtotal = dayItems.reduce((s, i) => s + i.amountUsd, 0);
+                const isFirst = idx === 0;
+                const isLast = idx === selected.days.length - 1;
+                return (
                 <article
                   key={day.id}
-                  className="bg-white dark:bg-background-dark rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 transition-all hover:shadow-md group/card"
+                  ref={(el) => {
+                    dayRefs.current[day.id] = el;
+                  }}
+                  className={`bg-white dark:bg-background-dark rounded-xl shadow-sm border transition-all hover:shadow-md group/card ${
+                    flipped ? 'border-primary/40 dark:border-primary/40' : 'border-gray-200 dark:border-gray-800'
+                  }`}
                 >
                   <div className="p-6">
-                    <div className="flex flex-col md:flex-row gap-4 mb-6">
-                      <div className="flex items-center gap-3 w-32 shrink-0">
-                        <div className={`size-8 rounded-full ${idx === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'} flex items-center justify-center font-bold text-sm`}>
-                          {day.dayNumber}
-                        </div>
-                        <span className="text-sm font-bold text-gray-900 dark:text-white">Day {day.dayNumber}</span>
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className={`size-8 rounded-full shrink-0 ${idx === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'} flex items-center justify-center font-bold text-sm`}>
+                        {day.dayNumber}
                       </div>
                       <div className="flex-1">
                         <input
-                          className="w-full text-lg font-bold text-gray-900 dark:text-white bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-primary focus:ring-0 p-0 transition-colors placeholder:text-gray-400"
+                          className="w-full text-left text-lg font-bold text-gray-900 dark:text-white bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-primary focus:ring-0 p-0 transition-colors placeholder:text-gray-400"
                           placeholder="Enter day title..."
                           type="text"
                           value={day.title}
                           onChange={(e) => b.updateDay(day.id, { title: e.target.value })}
                         />
                       </div>
-                      <div className="flex gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" onClick={() => b.moveDay(day.id, -1)}>
-                          <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            flipped
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          }`}
+                          onClick={() => setPricingFlips((prev) => ({ ...prev, [day.id]: !prev[day.id] }))}
+                          title={flipped ? 'Show day details' : 'Show day pricing'}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">{flipped ? 'description' : 'payments'}</span>
+                          {flipped ? 'Details' : 'Pricing'}
                         </button>
-                        <button className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" onClick={() => b.moveDay(day.id, 1)}>
-                          <span className="material-symbols-outlined text-[18px]">more_vert</span>
-                        </button>
-                        <button className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" onClick={() => b.deleteDay(day.id)}>
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
-                        </button>
+                        <div className="flex gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                          <button
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            onClick={() => requestMoveDay(day.id, -1)}
+                            disabled={isFirst}
+                            title="Move day up"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
+                          </button>
+                          <button
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            onClick={() => requestMoveDay(day.id, 1)}
+                            disabled={isLast}
+                            title="Move day down"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
+                          </button>
+                          <button
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
+                            onClick={() => requestDeleteDay(day.id)}
+                            title="Delete day"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="mb-6 pl-0 md:pl-[9.5rem]">
-                      <textarea
-                        className="w-full text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-transparent focus:border-primary focus:ring-0 resize-none p-3"
+                    {!flipped ? (
+                    <>
+                    <div className="mb-6">
+                      <AutoGrowTextarea
+                        className="w-full text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-transparent focus:border-primary focus:ring-0 resize-none p-3 overflow-hidden block"
                         placeholder="Describe the day's activities..."
-                        rows={3}
+                        minRows={3}
                         value={day.description}
-                        onChange={(e) => b.updateDay(day.id, { description: e.target.value })}
-                      ></textarea>
+                        onChange={(v) => b.updateDay(day.id, { description: v })}
+                      />
                     </div>
-                    <div className="pl-0 md:pl-[9.5rem] grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-gray-50 dark:bg-gray-800/30 rounded-lg p-3 border border-gray-100 dark:border-gray-800/50 flex gap-3">
                         <div className="bg-white dark:bg-gray-700 p-2 rounded-md h-fit shrink-0 shadow-sm text-gray-500 dark:text-gray-300">
                           <span className="material-symbols-outlined text-[18px]">directions_car</span>
@@ -1494,13 +1677,73 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
+                    </>
+                    ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-[18px]">payments</span>
+                          Day {day.dayNumber} Pricing
+                        </h4>
+                        <button
+                          className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                          onClick={() => {
+                            setLineModal({ mode: 'day', dayId: day.id });
+                            setLineName('');
+                            setLineAmount('0');
+                            setLineSaveTemplate(false);
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                          Add Line Item
+                        </button>
+                      </div>
+                      <div className="overflow-hidden rounded-xl border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1A2633] shadow-sm">
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-[#f0f2f4] dark:bg-[#24303f] text-[#111418] dark:text-white font-medium border-b border-[#dbe0e6] dark:border-gray-700">
+                            <tr>
+                              <th className="px-6 py-3 w-1/2">Item Name</th>
+                              <th className="px-6 py-3">Category</th>
+                              <th className="px-6 py-3 text-right">Cost (USD)</th>
+                              <th className="px-4 py-3 w-[60px]"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#dbe0e6] dark:divide-gray-800">
+                            {dayItems.map((item) => (
+                              <PricingTableRow
+                                key={item.id}
+                                item={item}
+                                badgeClassName={kindBadgeClass(item.kind)}
+                                badgeLabel={item.kind}
+                                onSave={(patch) => b.updateDayLineItem(day.id, item.id, patch)}
+                                onDelete={() => b.deleteDayLineItem(day.id, item.id)}
+                              />
+                            ))}
+                            {dayItems.length === 0 ? (
+                              <tr>
+                                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400" colSpan={4}>
+                                  No pricing line items for this day yet.
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                        <div className="bg-[#fcfdfd] dark:bg-[#1A2633] p-3 border-t border-[#dbe0e6] dark:border-gray-700 flex justify-end">
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Day Subtotal: <span className="font-bold text-[#111418] dark:text-white ml-1">${daySubtotal.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    )}
                   </div>
                 </article>
-              ))}
+                );
+              })}
 
               <button
                 className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-6 flex items-center justify-center gap-2 text-gray-500 hover:text-primary hover:border-primary hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-all group"
-                onClick={() => b.addDay()}
+                onClick={handleAddDay}
               >
                 <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
                   <span className="material-symbols-outlined">add</span>
@@ -1509,234 +1752,6 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="h-12"></div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto p-6 md:p-8">
-            <div className="w-full max-w-[1024px] flex flex-col gap-8 pb-10">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="col-span-1 md:col-span-2 flex flex-col justify-center gap-2 p-6 bg-white dark:bg-[#1A2633] rounded-xl border border-[#e5e7eb] dark:border-gray-800 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary">tune</span>
-                      Matrix Controls
-                    </h3>
-                    <button
-                      className="inline-flex items-center gap-2 rounded-lg border border-[#dbe0e6] dark:border-gray-700 px-3 py-2 text-sm font-medium text-[#111418] dark:text-gray-100 hover:bg-[#f7f8fa] dark:hover:bg-gray-800 transition-colors"
-                      onClick={() => {
-                        setImpJson(null);
-                        setImpError(null);
-                        setImportTitleConflict(null);
-                        setImpOpen(true);
-                      }}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">upload</span>
-                      Import Pricing
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <div className="flex bg-[#f0f2f4] dark:bg-[#24303f] p-1 rounded-lg">
-                      {(['3', '4', '5', 'deluxe'] as const).map((lv) => (
-                        <label className="cursor-pointer" key={lv}>
-                          <input
-                            className="peer sr-only"
-                            name="level"
-                            type="radio"
-                            checked={b.pricingLevel === lv}
-                            onChange={() => b.setPricingLevel(lv)}
-                          />
-                          <span className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 transition-all hover:bg-white/50 dark:hover:bg-gray-700 peer-checked:bg-white dark:peer-checked:bg-gray-600 peer-checked:text-primary peer-checked:shadow-sm flex items-center gap-2">
-                            {lv === 'deluxe' ? 'Deluxe' : `${lv} Star`}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="flex bg-[#f0f2f4] dark:bg-[#24303f] p-1 rounded-lg">
-                      {(['single', 'double', 'triple'] as const).map((occ) => (
-                        <label className="cursor-pointer" key={occ}>
-                          <input
-                            className="peer sr-only"
-                            name="occupancy"
-                            type="radio"
-                            checked={b.pricingOccupancy === occ}
-                            onChange={() => b.setPricingOccupancy(occ)}
-                          />
-                          <span className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 dark:text-gray-400 transition-all hover:bg-white/50 dark:hover:bg-gray-700 peer-checked:bg-white dark:peer-checked:bg-gray-600 peer-checked:text-primary peer-checked:shadow-sm flex items-center gap-2">
-                            {occ.charAt(0).toUpperCase() + occ.slice(1)}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="col-span-1 flex flex-col justify-between rounded-xl p-6 bg-primary text-white shadow-lg shadow-primary/20 relative overflow-hidden">
-                  <div className="absolute -right-6 -top-6 size-32 bg-white/10 rounded-full blur-2xl"></div>
-                  <div className="relative z-10">
-                    <p className="text-primary-50 text-sm font-medium leading-normal mb-1">Total Price Per Person</p>
-                    <div className="flex items-baseline gap-1">
-                      <p className="text-4xl font-bold leading-tight tracking-tight">${totalPriceUsd.toLocaleString()}</p>
-                      <span className="text-lg opacity-80">.00</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-white/20 flex justify-between items-center relative z-10">
-                    <span className="text-xs font-medium text-primary-100 uppercase tracking-wider">Estimated Margin</span>
-                    <span className="font-bold text-white bg-white/20 px-2 py-0.5 rounded text-sm">—</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight">Global Costs</h3>
-                  <button
-                    className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                    onClick={() => {
-                      setLineModal({ mode: 'general' });
-                      setLineName('');
-                      setLineAmount('0');
-                      setLineSaveTemplate(false);
-                    }}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                    Add Item
-                  </button>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1A2633] shadow-sm">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-[#f0f2f4] dark:bg-[#24303f] text-[#111418] dark:text-white font-medium border-b border-[#dbe0e6] dark:border-gray-700">
-                      <tr>
-                        <th className="px-6 py-4 w-1/2">Item Name</th>
-                        <th className="px-6 py-4">Category</th>
-                        <th className="px-6 py-4 text-right">Cost (USD)</th>
-                        <th className="px-4 py-4 w-[60px]"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#dbe0e6] dark:divide-gray-800">
-                      {baseGeneralItems.map((item) => (
-                        <PricingTableRow
-                          key={item.id}
-                          item={item}
-                          badgeClassName={kindBadgeClass(item.kind)}
-                          badgeLabel={item.kind}
-                          onSave={(patch) => b.updateGeneralLineItem(item.id, patch)}
-                          onDelete={() => b.deleteGeneralLineItem(item.id)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="bg-[#fcfdfd] dark:bg-[#1A2633] p-3 border-t border-[#dbe0e6] dark:border-gray-700 flex justify-end">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      Subtotal Global: <span className="font-bold text-[#111418] dark:text-white ml-1">${globalSubtotalUsd}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight">Additional Fees</h3>
-                  <button
-                    className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                    onClick={() => {
-                      setLineModal({ mode: 'fee' });
-                      setLineName('');
-                      setLineAmount('0');
-                      setLineSaveTemplate(false);
-                    }}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                    Add Fee
-                  </button>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1A2633] shadow-sm">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-[#f0f2f4] dark:bg-[#24303f] text-[#111418] dark:text-white font-medium border-b border-[#dbe0e6] dark:border-gray-700">
-                      <tr>
-                        <th className="px-6 py-4 w-1/2">Item Name</th>
-                        <th className="px-6 py-4">Category</th>
-                        <th className="px-6 py-4 text-right">Cost (USD)</th>
-                        <th className="px-4 py-4 w-[60px]"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#dbe0e6] dark:divide-gray-800">
-                      {feeItems.map((item) => (
-                        <PricingTableRow
-                          key={item.id}
-                          item={item}
-                          badgeClassName={kindBadgeClass(item.kind)}
-                          badgeLabel={item.kind}
-                          onSave={(patch) => b.updateGeneralLineItem(item.id, patch)}
-                          onDelete={() => b.deleteGeneralLineItem(item.id)}
-                        />
-                      ))}
-                      {feeItems.length === 0 ? (
-                        <tr>
-                          <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400" colSpan={4}>
-                            No additional fees added yet.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                  <div className="bg-[#fcfdfd] dark:bg-[#1A2633] p-3 border-t border-[#dbe0e6] dark:border-gray-700 flex justify-end">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      Subtotal Fees: <span className="font-bold text-[#111418] dark:text-white ml-1">${feesSubtotalUsd}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="text-[#111418] dark:text-white text-lg font-bold leading-tight">Day Costs</h3>
-                  <button
-                    className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                    onClick={() => {
-                      const firstDay = selected.days[0];
-                      if (!firstDay) return;
-                      setLineModal({ mode: 'day', dayId: firstDay.id });
-                      setLineName('');
-                      setLineAmount('0');
-                      setLineSaveTemplate(false);
-                    }}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                    Add Day Cost
-                  </button>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-[#dbe0e6] dark:border-gray-700 bg-white dark:bg-[#1A2633] shadow-sm">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-[#f0f2f4] dark:bg-[#24303f] text-[#111418] dark:text-white font-medium border-b border-[#dbe0e6] dark:border-gray-700">
-                      <tr>
-                        <th className="px-6 py-4 w-[100px]">Day</th>
-                        <th className="px-6 py-4 w-1/3">Activity / Item</th>
-                        <th className="px-6 py-4">Type</th>
-                        <th className="px-6 py-4 text-right">Cost (USD)</th>
-                        <th className="px-4 py-4 w-[60px]"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#dbe0e6] dark:divide-gray-800">
-                      {dayCostRows.map((row) => (
-                        <PricingDayRow
-                          key={row.item.id}
-                          dayLabel={`Day ${row.dayNumber}`}
-                          showDayLabel={row.showDay}
-                          item={row.item}
-                          badgeClassName={kindBadgeClass(row.item.kind)}
-                          badgeLabel={row.item.kind}
-                          onSave={(patch) => b.updateDayLineItem(row.dayId, row.item.id, patch)}
-                          onDelete={() => b.deleteDayLineItem(row.dayId, row.item.id)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="bg-[#fcfdfd] dark:bg-[#1A2633] p-3 border-t border-[#dbe0e6] dark:border-gray-700 flex justify-end">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      Subtotal Day Costs: <span className="font-bold text-[#111418] dark:text-white ml-1">${daySubtotalUsd}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -1790,13 +1805,15 @@ export default function Dashboard() {
                     <span className="material-symbols-outlined text-[18px]">add</span>
                     <span className="truncate">New</span>
                   </button>
-                  <button
-                    className="flex-1 cursor-pointer items-center justify-center rounded-lg h-9 px-3 bg-[#f0f2f4] hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[#111418] dark:text-white text-sm font-bold tracking-[0.015em] transition-colors flex gap-2"
-                    onClick={() => setImpOpen(true)}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">upload</span>
-                    <span className="truncate">Import</span>
-                  </button>
+                  {isAdmin ? (
+                    <button
+                      className="flex-1 cursor-pointer items-center justify-center rounded-lg h-9 px-3 bg-[#f0f2f4] hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[#111418] dark:text-white text-sm font-bold tracking-[0.015em] transition-colors flex gap-2"
+                      onClick={() => setImpOpen(true)}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">upload</span>
+                      <span className="truncate">Import</span>
+                    </button>
+                  ) : null}
                 </div>
                 <button
                   className="text-xs font-semibold text-primary hover:underline"
@@ -2318,24 +2335,53 @@ export default function Dashboard() {
           </div>
         </div>
       ) : null}
-      <input
-        ref={coverInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file || !selected) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = typeof reader.result === 'string' ? reader.result : '';
-            if (!result) return;
-            setCoverImagesById((prev) => ({ ...prev, [selected.id]: result }));
-            b.updateItineraryCover(result);
-          };
-          reader.readAsDataURL(file);
-        }}
-      />
+      {dayActionConfirm && selected
+        ? (() => {
+            const idx = selected.days.findIndex((d) => d.id === dayActionConfirm.dayId);
+            const day = selected.days[idx];
+            const position = idx === 0 ? 'first' : 'last';
+            const actionLabel =
+              dayActionConfirm.type === 'delete'
+                ? 'delete'
+                : dayActionConfirm.dir === -1
+                  ? 'move up'
+                  : 'move down';
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40" onClick={() => setDayActionConfirm(null)} aria-hidden="true" />
+                <div className="relative w-[95vw] max-w-md rounded-lg bg-white dark:bg-[#1A2633] p-6 shadow-lg">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-amber-500 text-[28px]">warning</span>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                        {dayActionConfirm.type === 'delete' ? 'Delete this day?' : 'Move this day?'}
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        You are about to {actionLabel} <span className="font-semibold">Day {day?.dayNumber}{day?.title ? ` — ${day.title}` : ''}</span>, which is the {position} day of this itinerary. Please confirm you want to make this change.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-6 flex justify-end gap-2">
+                    <button
+                      className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-colors"
+                      onClick={() => setDayActionConfirm(null)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className={`px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors ${
+                        dayActionConfirm.type === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'
+                      }`}
+                      onClick={confirmDayAction}
+                    >
+                      {dayActionConfirm.type === 'delete' ? 'Delete Day' : 'Confirm Move'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()
+        : null}
     </StitchShell>
   );
 }

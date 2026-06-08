@@ -3,6 +3,7 @@ import { useItineraries } from '../services/itineraries';
 import { api } from '../api/client';
 import type { ItineraryWithDays, ProposalDraft, Client, ItineraryMessageTemplate } from '../api/client';
 import StitchShell from '../components/StitchShell';
+import { useAuth } from '../auth/auth';
 import { compileItineraryMessageParagraphs, splitMessageParagraphs } from '../utils/itineraryMessageTemplate';
 
 type ViewMode = 'SELECTION' | 'EDITOR' | 'SEND';
@@ -147,6 +148,8 @@ function parseFlights(raw: string): FlightRow[] {
 }
 
 export default function ProposalsTab() {
+  const { user } = useAuth();
+  const preparedByName = user?.name || 'Team';
   const [viewMode, setViewMode] = useState<ViewMode>('SELECTION');
   const [sendSubject, setSendSubject] = useState('');
   const [sendFrom, setSendFrom] = useState('');
@@ -158,6 +161,13 @@ export default function ProposalsTab() {
   const [sendDoneLabel, setSendDoneLabel] = useState<string | null>(null);
   const [proposalData, setProposalData] = useState<ProposalData>(blankProposal);
   const [baseItinerary, setBaseItinerary] = useState<ItineraryWithDays | null>(null);
+
+  // Seed "Prepared by" from the signed-in user while it still holds the default.
+  useEffect(() => {
+    setProposalData((prev) =>
+      !prev.preparedBy || prev.preparedBy === 'Public' ? { ...prev, preparedBy: preparedByName } : prev,
+    );
+  }, [preparedByName]);
   const [baseLoading, setBaseLoading] = useState(false);
   const [drafts, setDrafts] = useState<ProposalDraft[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
@@ -185,6 +195,36 @@ export default function ProposalsTab() {
   });
   const dragRef = useRef(false);
   const splitRef = useRef<HTMLDivElement>(null);
+  const clientViewRef = useRef<HTMLDivElement>(null);
+
+  function handleSaveAsPdf() {
+    const node = clientViewRef.current;
+    if (!node) return;
+    const printWindow = window.open('', '_blank', 'width=900,height=1200');
+    if (!printWindow) {
+      window.alert('Please allow pop-ups to export the proposal as a PDF.');
+      return;
+    }
+    // Carry over the app's stylesheets and fonts so the printed page matches the live view.
+    const headAssets = Array.from(
+      document.querySelectorAll('style, link[rel="stylesheet"], link[rel="preconnect"], link[rel="dns-prefetch"], link[href*="fonts"]'),
+    )
+      .map((el) => el.outerHTML)
+      .join('\n');
+    const fileTitle = `Proposal - ${proposalData.clientName || 'Client'}`;
+    printWindow.document.write(
+      `<!doctype html><html><head><meta charset="utf-8" /><title>${fileTitle}</title>${headAssets}` +
+        `<style>` +
+        `@page { size: A4; margin: 12mm; }` +
+        `html, body { background: #ffffff; margin: 0; padding: 0; }` +
+        `.pdf-root { width: 100%; }` +
+        `.pdf-root > div { box-shadow: none !important; min-height: 0 !important; }` +
+        `</style>` +
+        `<script>window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 400); }); window.addEventListener('afterprint', function () { window.close(); });</script>` +
+        `</head><body><div class="pdf-root">${node.outerHTML}</div></body></html>`,
+    );
+    printWindow.document.close();
+  }
 
   const itinerariesQuery = useItineraries();
   const itineraries = itinerariesQuery.data?.itineraries ?? [];
@@ -452,7 +492,7 @@ export default function ProposalsTab() {
     return {
       logoUrl: 'https://s3-eu-west-1.amazonaws.com/tpd/logos/56cdc0d60000ff000589570b/0x0.png',
       companyName: 'SA Vacations',
-      preparedBy: proposalData.preparedBy || 'Public',
+      preparedBy: proposalData.preparedBy || preparedByName,
       heading: proposalHeading(),
       messageParagraphs: messageParagraphs.length ? messageParagraphs : ['Add a personalized message to show here.'],
       airfareUsd,
@@ -569,7 +609,7 @@ export default function ProposalsTab() {
       leadId: firstClient?.id ?? leadOptions[0]?.id ?? 'lead-123',
       clientId: firstClient?.id,
       startDate: '',
-      preparedBy: 'Public',
+      preparedBy: preparedByName,
       firstLastFlightOverride: false,
       travelers: 4,
       travelDates: 'Oct 12 - Oct 20, 2024',
@@ -1083,6 +1123,13 @@ export default function ProposalsTab() {
                   Preview
                 </button>
                 <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white dark:bg-gray-700 border border-[#dbe0e6] dark:border-gray-600 text-[#111418] dark:text-white text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                  onClick={handleSaveAsPdf}
+                >
+                  <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
+                  Save as PDF
+                </button>
+                <button
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
                   onClick={handleSaveProposal}
                 >
@@ -1514,7 +1561,7 @@ export default function ProposalsTab() {
                     Back
                   </button>
                 </div>
-                <div className="bg-white w-full min-h-[800px] shadow-xl rounded-sm p-8 flex flex-col gap-6 relative">
+                <div ref={clientViewRef} className="bg-white w-full min-h-[800px] shadow-xl rounded-sm p-8 flex flex-col gap-6 relative">
                   <div className="flex justify-between items-start border-b border-gray-100 pb-6">
                     <div className="flex items-center gap-3">
                       <div className="size-12 rounded bg-white border border-gray-200 flex items-center justify-center overflow-hidden">

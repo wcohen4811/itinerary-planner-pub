@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/auth';
 
 type StitchShellProps = {
   active: 'itineraries' | 'proposals' | 'clients';
@@ -8,6 +9,7 @@ type StitchShellProps = {
 
 export default function StitchShell({ active, children }: StitchShellProps) {
   const navigate = useNavigate();
+  const { user, isAdmin, logout } = useAuth();
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background-light dark:bg-background-dark text-[#111418] dark:text-white font-display">
       <aside className="w-64 flex flex-col bg-white dark:bg-background-dark border-r border-gray-200 dark:border-gray-800 shrink-0 z-20">
@@ -63,34 +65,43 @@ export default function StitchShell({ active, children }: StitchShellProps) {
               <span className={`material-symbols-outlined ${active === 'clients' ? 'icon-fill' : ''}`}>people</span>
               <span className="text-sm font-medium">Clients</span>
             </button>
-            <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-[#617589] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <span className="material-symbols-outlined">calendar_month</span>
-              <span className="text-sm font-medium">Bookings</span>
-            </button>
-            <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-[#617589] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <span className="material-symbols-outlined">group</span>
-              <span className="text-sm font-medium">Customers</span>
-            </button>
-            <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-[#617589] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <span className="material-symbols-outlined">settings</span>
-              <span className="text-sm font-medium">Settings</span>
-            </button>
+            {isAdmin ? (
+              <button
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-[#617589] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                onClick={() => navigate('/admin')}
+              >
+                <span className="material-symbols-outlined">admin_panel_settings</span>
+                <span className="text-sm font-medium">Admin</span>
+              </button>
+            ) : null}
           </nav>
         </div>
         <div className="mt-auto p-4 border-t border-gray-200 dark:border-gray-800">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div
-              className="bg-center bg-no-repeat bg-cover rounded-full size-8"
-              style={{
-                backgroundImage:
-                  'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDaIEJZ9jiEG713wZxnZqxiohu0CxOQnuV2IoVe9KGmRlalgb2FkT5ccYzfdlKmIt-E0QOY6HHRv0Un-mgbyYpUrFoAsJiUR_77nyjNpGZ0P4mbnDNIoQNOD2W8j_mWeCiW2q9TbVInXM8Zm2_jdosUngygoDzYPqZWQZ7URcYUFUIqDRO78tghSNAAl-cD-kJL5C_2Ewc9puoaDZFxOlUhvslweXJi8F4lijmk4Nfi9B57hhyQ1Ebh0V2KJ_X02rVwXfNoH12Kqlc")',
-              }}
-            ></div>
-            <div className="flex flex-col">
-              <p className="text-[#111418] dark:text-white text-sm font-medium">Demo User</p>
-              <p className="text-[#617589] dark:text-gray-400 text-xs">demo@example.com</p>
+            {user?.picture ? (
+              <div
+                className="bg-center bg-no-repeat bg-cover rounded-full size-8 shrink-0"
+                style={{ backgroundImage: `url("${user.picture}")` }}
+              ></div>
+            ) : (
+              <div className="flex items-center justify-center rounded-full size-8 shrink-0 bg-primary/10 text-primary text-sm font-semibold">
+                {(user?.name ?? 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="flex flex-col overflow-hidden">
+              <p className="text-[#111418] dark:text-white text-sm font-medium truncate">{user?.name ?? 'User'}</p>
+              <p className="text-[#617589] dark:text-gray-400 text-xs truncate">
+                {user?.email ?? (isAdmin ? 'Administrator' : 'Team member')}
+              </p>
             </div>
           </div>
+          <button
+            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[#617589] dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            onClick={logout}
+          >
+            <span className="material-symbols-outlined">logout</span>
+            <span className="text-sm font-medium">Log out</span>
+          </button>
         </div>
       </aside>
 

@@ -4,6 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { apiToPrisma } from '../utils/accommodation.js';
 import { getItineraryPricing } from '../services/pricing.js';
 import { cascadeItineraryDates, computeEndDate } from '../services/dates.js';
+import { requireAdmin } from '../middleware/auth.js';
 export const itinerariesRouter = Router();
 const MAX_COVER_BYTES = 2 * 1024 * 1024;
 function base64Bytes(raw) {
@@ -62,24 +63,18 @@ itinerariesRouter.post('/', async (req, res) => {
         return res.status(400).json({ error: 'title required' });
     if (!startDate)
         return res.status(400).json({ error: 'startDate required (ISO string)' });
-    // Upsert a public user for unauthenticated usage
-    const publicUser = await prisma.user.upsert({
-        where: { providerId: 'public' },
-        update: {},
-        create: { provider: 'public', providerId: 'public', email: null },
-        select: { id: true },
-    });
+    const authorName = createdByName ?? req.appUser?.name ?? 'User';
     const it = await prisma.itinerary.create({
         data: {
-            userId: publicUser.id,
+            userId: req.appUser.id,
             title,
             description: description ?? null,
             messageTemplate: messageTemplate ?? null,
             startDate: new Date(startDate),
             accommodationLevel: apiToPrisma(accommodationLevel),
             blankPricing: !!blankPricing,
-            createdByName: createdByName ?? 'Public',
-            updatedByName: createdByName ?? 'Public',
+            createdByName: authorName,
+            updatedByName: authorName,
             totalPriceUsd: 0,
         },
         include: { days: true },
@@ -113,6 +108,8 @@ itinerariesRouter.put('/:id', async (req, res) => {
         data.startDate = new Date(startDate);
     if (updatedByName)
         data.updatedByName = updatedByName;
+    else if (req.appUser?.name)
+        data.updatedByName = req.appUser.name;
     const updated = await prisma.itinerary.update({ where: { id: it.id }, data, include: { days: true } });
     if (startDate) {
         await cascadeItineraryDates(updated.id);
@@ -135,8 +132,8 @@ itinerariesRouter.get('/:id', async (req, res) => {
     const end = computeEndDate(new Date(it.startDate), it.days.length);
     res.json({ itinerary: { ...it, endDate: end.toISOString() } });
 });
-// Delete an itinerary and its days
-itinerariesRouter.delete('/:id', async (req, res) => {
+// Delete an itinerary and its days (admin only)
+itinerariesRouter.delete('/:id', requireAdmin, async (req, res) => {
     const it = await prisma.itinerary.findFirst({ where: { id: req.params.id } });
     if (!it)
         return res.status(404).json({ error: 'Not found' });

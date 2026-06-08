@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { PricingLineItem, PricingDayItems, PricingTemplate, Occupancy, ItineraryMessageTemplate } from '../api/client';
 import type { Day, ItineraryWithDays } from '../api/client';
@@ -83,6 +83,24 @@ export function useDashboardBackend() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [serverIt, setServerIt] = useState<ItineraryWithDays | null>(null);
   const [localIt, setLocalIt] = useState<UiItinerary | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  // Refs let the debounced autosave read the latest state without stale closures.
+  const serverItRef = useRef<ItineraryWithDays | null>(null);
+  const localItRef = useRef<UiItinerary | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const creatingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    serverItRef.current = serverIt;
+  }, [serverIt]);
+  useEffect(() => {
+    localItRef.current = localIt;
+  }, [localIt]);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
   const [pricingLevel, setPricingLevel] = useState<'3' | '4' | '5' | 'deluxe'>('3');
   const [pricingOccupancy, setPricingOccupancy] = useState<Occupancy>('double');
   const [pricingGeneralItems, setPricingGeneralItems] = useState<PricingLineItem[]>([]);
@@ -179,10 +197,10 @@ export function useDashboardBackend() {
     setLocalIt((prev) => (prev ? { ...prev, days: prev.days.filter((d) => d.id !== dayId) } : prev));
   }
   function addDay() {
+    const nid = `new-${Math.random().toString(36).slice(2, 8)}`;
     setLocalIt((prev) => {
       if (!prev) return prev;
       const nextNumber = (prev.days.reduce((m, d) => Math.max(m, d.dayNumber), 0) || 0) + 1;
-      const nid = `new-${Math.random().toString(36).slice(2, 8)}`;
       const newDay: UiDay = {
         id: nid,
         dayNumber: nextNumber,
@@ -197,6 +215,7 @@ export function useDashboardBackend() {
       };
       return { ...prev, days: [...prev.days, newDay] };
     });
+    return nid;
   }
   function moveDay(dayId: string, dir: -1 | 1) {
     setLocalIt((prev) => {
@@ -223,6 +242,138 @@ export function useDashboardBackend() {
   const delDay = useMutation({
     mutationFn: (dayId: string) => api.deleteDay(selectedId!, dayId),
   });
+
+  // Debounced server-side autosave. Persists itinerary field edits, day field
+  // edits, day creations, and day deletions to Postgres without a manual Save.
+  async function runAutosave() {
+    const selId = selectedIdRef.current;
+    const server = serverItRef.current;
+    const local = localItRef.current;
+    if (!selId || !server || !local) return;
+    if (savingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+
+    const serverById = new Map(server.days.map((d) => [d.id, d]));
+    const localIds = new Set(local.days.map((d) => d.id));
+
+    const itPatch: any = {};
+    if (server.title !== local.title) itPatch.title = local.title;
+    if ((server.description ?? '') !== (local.description ?? '')) itPatch.description = local.description ?? '';
+    if ((server.coverImageBase64 ?? null) !== (local.coverImageBase64 ?? null)) {
+      itPatch.coverImageBase64 = local.coverImageBase64 ?? null;
+    }
+    if (!templatesEqual((server as any).messageTemplate ?? null, local.messageTemplate ?? null)) {
+      itPatch.messageTemplate = local.messageTemplate ?? null;
+    }
+
+    const creates = local.days.filter((ld) => ld.id.startsWith('new-') || !serverById.has(ld.id));
+    const updates = local.days.filter((ld) => {
+      const sd = serverById.get(ld.id);
+      if (!sd) return false;
+      return (
+        sd.dayNumber !== ld.dayNumber ||
+        sd.title !== ld.title ||
+        sd.description !== ld.description ||
+        sd.destination !== ld.destination ||
+        (sd.destinationId ?? null) !== (ld.destinationId ?? null) ||
+        sd.transferStatus !== ld.transferStatus ||
+        (sd.transferCount ?? 0) !== (ld.transferCount ?? 0) ||
+        sd.accommodationLevel !== ld.accommodationLevel ||
+        (sd.hotelName ?? '') !== (ld.hotelName ?? '')
+      );
+    });
+    const deletions = server.days.filter((sd) => !localIds.has(sd.id));
+
+    if (!Object.keys(itPatch).length && creates.length === 0 && updates.length === 0 && deletions.length === 0) {
+      return; // nothing to persist
+    }
+
+    savingRef.current = true;
+    setAutosaveStatus('saving');
+    try {
+      if (Object.keys(itPatch).length) {
+        await api.updateItinerary(selId, itPatch);
+      }
+
+      const idRemap = new Map<string, string>();
+      for (const ld of creates) {
+        if (creatingRef.current.has(ld.id)) continue;
+        creatingRef.current.add(ld.id);
+        try {
+          const created = await api.createDay(selId, {
+            dayNumber: ld.dayNumber,
+            title: (ld.title || 'New Day').trim() || 'New Day',
+            description: (ld.description || 'TBD').trim() || 'TBD',
+            hotelName: ld.hotelName || undefined,
+            destination: (ld.destination || 'TBD').trim() || 'TBD',
+            destinationId: ld.destinationId ?? undefined,
+            transferStatus: ld.transferStatus || 'none',
+            transferCount: Math.max(0, ld.transferCount ?? 0),
+            accommodationLevel: ld.accommodationLevel || server.accommodationLevel,
+          });
+          idRemap.set(ld.id, created.day.id);
+        } finally {
+          creatingRef.current.delete(ld.id);
+        }
+      }
+
+      for (const ld of updates) {
+        const sd = serverById.get(ld.id)!;
+        const dPatch: any = {};
+        if (sd.dayNumber !== ld.dayNumber) dPatch.dayNumber = ld.dayNumber;
+        if (sd.title !== ld.title) dPatch.title = ld.title;
+        if (sd.description !== ld.description) dPatch.description = ld.description;
+        if (sd.destination !== ld.destination) dPatch.destination = ld.destination;
+        if ((sd.destinationId ?? null) !== (ld.destinationId ?? null)) dPatch.destinationId = ld.destinationId ?? null;
+        if (sd.transferStatus !== ld.transferStatus) dPatch.transferStatus = ld.transferStatus;
+        if ((sd.transferCount ?? 0) !== (ld.transferCount ?? 0)) dPatch.transferCount = Math.max(0, ld.transferCount ?? 0);
+        if (sd.accommodationLevel !== ld.accommodationLevel) dPatch.accommodationLevel = ld.accommodationLevel;
+        if ((sd.hotelName ?? '') !== (ld.hotelName ?? '')) dPatch.hotelName = ld.hotelName ?? '';
+        if (Object.keys(dPatch).length) {
+          await api.updateDay(selId, ld.id, dPatch);
+        }
+      }
+
+      for (const sd of deletions) {
+        await api.deleteDay(selId, sd.id);
+      }
+
+      // Refresh the server snapshot (but keep local edits intact). Remap any
+      // newly-created day ids so later diffs treat them as existing rows.
+      const fresh = await api.getItinerary(selId);
+      setServerIt(fresh.itinerary);
+      if (idRemap.size) {
+        setLocalIt((prev) =>
+          prev
+            ? { ...prev, days: prev.days.map((d) => (idRemap.has(d.id) ? { ...d, id: idRemap.get(d.id)! } : d)) }
+            : prev,
+        );
+      }
+      await qc.invalidateQueries({ queryKey: ['dash-itins'] });
+      setAutosaveStatus('saved');
+    } catch {
+      setAutosaveStatus('error');
+    } finally {
+      savingRef.current = false;
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+        autosaveTimer.current = setTimeout(() => void runAutosave(), 800);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedId || !serverIt || !localIt) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => void runAutosave(), 1200);
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localIt]);
 
   async function publish() {
     if (!serverIt || !localIt) return;
@@ -582,6 +733,7 @@ export function useDashboardBackend() {
     // status
     isLoading: list.isLoading,
     error: list.error as Error | null,
+    autosaveStatus,
     publishWithOverrideDescription,
     async publishWithProgress(description: string, onProgress: (p: number) => void) {
       if (!serverIt) return;

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db/prisma.js';
 import { apiToPrisma } from '../utils/accommodation.js';
 import { ensurePricingTemplate } from '../services/pricingTemplates.js';
+import { requireAdmin } from '../middleware/auth.js';
 const occupancyValues = ['single', 'double', 'triple'];
 function parseOccupancy(raw) {
     if (occupancyValues.includes(raw))
@@ -48,7 +49,7 @@ pricingTemplatesRouter.get('/templates', async (req, res) => {
     }));
     res.json({ templates: result });
 });
-pricingTemplatesRouter.post('/templates', async (req, res) => {
+pricingTemplatesRouter.post('/templates', requireAdmin, async (req, res) => {
     const body = req.body ?? {};
     const name = (body.name ?? '').trim();
     if (!name)
@@ -68,7 +69,7 @@ pricingTemplatesRouter.post('/templates', async (req, res) => {
     }
     res.status(201).json({ template: created });
 });
-pricingTemplatesRouter.put('/templates/:id', async (req, res) => {
+pricingTemplatesRouter.put('/templates/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const template = await prisma.pricingLineItemTemplate.findFirst({ where: { id } });
     if (!template)
@@ -94,7 +95,7 @@ pricingTemplatesRouter.put('/templates/:id', async (req, res) => {
         throw e;
     }
 });
-pricingTemplatesRouter.delete('/templates/:id', async (req, res) => {
+pricingTemplatesRouter.delete('/templates/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const template = await prisma.pricingLineItemTemplate.findFirst({ where: { id } });
     if (!template)

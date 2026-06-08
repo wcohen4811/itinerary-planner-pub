@@ -154,9 +154,37 @@ export type ProposalDraft = {
   updatedAt: string;
 };
 
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
+let authTokenProvider: (() => Promise<string | null>) | null = null;
+
+/**
+ * Registers a function that returns the current Auth0 access token. The API
+ * layer calls it before each request and attaches `Authorization: Bearer`.
+ */
+export function setAuthTokenProvider(fn: (() => Promise<string | null>) | null) {
+  authTokenProvider = fn;
+}
+
+function withBase(input: RequestInfo): RequestInfo {
+  if (typeof input === 'string' && input.startsWith('/')) return `${API_BASE}${input}`;
+  return input;
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!authTokenProvider) return {};
+  try {
+    const token = await authTokenProvider();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function http<T = any>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(withBase(input), {
+    headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers || {}) },
     ...init,
   });
   if (!res.ok) {
@@ -190,9 +218,10 @@ async function importItinerariesHttp(payload: unknown): Promise<{
   createdNewItinerary?: boolean[];
   createdItineraryIds: string[];
 }> {
-  const res = await fetch('/admin/import-itineraries', {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(withBase('/admin/import-itineraries'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify(payload),
   });
   const ct = res.headers.get('content-type') || '';
@@ -339,6 +368,8 @@ export const api = {
     }>,
   ) => http<{ client: Client }>(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteClient: (id: string) => http<void>(`/clients/${id}`, { method: 'DELETE' }),
+  aiComplete: (body: { prompt: string; system?: string; maxTokens?: number }) =>
+    http<{ text: string }>(`/ai/complete`, { method: 'POST', body: JSON.stringify(body) }),
 };
 
 

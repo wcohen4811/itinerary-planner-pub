@@ -28,11 +28,12 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@react-email/components": "^1.0.12",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.22.1",
-    "express-openid-connect": "^2.16.0",
+    "express-oauth2-jwt-bearer": "^1.6.0",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
     "openai": "^4.67.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -40,7 +41,6 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.7.4",

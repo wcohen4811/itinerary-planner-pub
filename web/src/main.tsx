@@ -9,26 +9,32 @@ import Providers from './pages/Providers';
 import Dashboard from './pages/Dashboard';
 import ProposalsTab from './pages/ProposalsTab';
 import ClientsTab from './pages/ClientsTab';
+import Login from './pages/Login';
+import AdminPortal from './pages/AdminPortal';
+import { AppAuthProvider } from './auth/auth';
+import { AuthBridge, RequireAuth, RequireAdmin } from './auth/guards';
 
 const queryClient = new QueryClient();
 
 const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <Dashboard />,
-  },
-  { path: '/dashboard', element: <Dashboard /> },
-  { path: '/proposals', element: <ProposalsTab /> },
-  { path: '/clients', element: <ClientsTab /> },
-  { path: '/itineraries', element: <ItinerariesList /> },
-  { path: '/itineraries/:id', element: <ItineraryDetail /> },
-  { path: '/providers', element: <Providers /> },
+  { path: '/login', element: <Login /> },
+  { path: '/', element: <RequireAuth><Dashboard /></RequireAuth> },
+  { path: '/dashboard', element: <RequireAuth><Dashboard /></RequireAuth> },
+  { path: '/proposals', element: <RequireAuth><ProposalsTab /></RequireAuth> },
+  { path: '/clients', element: <RequireAuth><ClientsTab /></RequireAuth> },
+  { path: '/itineraries', element: <RequireAuth><ItinerariesList /></RequireAuth> },
+  { path: '/itineraries/:id', element: <RequireAuth><ItineraryDetail /></RequireAuth> },
+  { path: '/providers', element: <RequireAdmin><Providers /></RequireAdmin> },
+  { path: '/admin', element: <RequireAdmin><AdminPortal /></RequireAdmin> },
 ]);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AppAuthProvider>
+        <AuthBridge />
+        <RouterProvider router={router} />
+      </AppAuthProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

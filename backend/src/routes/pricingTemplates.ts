@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db/prisma.js';
 import { apiToPrisma } from '../utils/accommodation.js';
 import { ensurePricingTemplate } from '../services/pricingTemplates.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 const occupancyValues = ['single', 'double', 'triple'] as const;
 type ApiOccupancy = typeof occupancyValues[number];
@@ -54,7 +55,7 @@ pricingTemplatesRouter.get('/templates', async (req, res) => {
   res.json({ templates: result });
 });
 
-pricingTemplatesRouter.post('/templates', async (req, res) => {
+pricingTemplatesRouter.post('/templates', requireAdmin, async (req, res) => {
   const body = req.body ?? {};
   const name = (body.name ?? '').trim();
   if (!name) return res.status(400).json({ error: 'name required' });
@@ -74,7 +75,7 @@ pricingTemplatesRouter.post('/templates', async (req, res) => {
   res.status(201).json({ template: created });
 });
 
-pricingTemplatesRouter.put('/templates/:id', async (req, res) => {
+pricingTemplatesRouter.put('/templates/:id', requireAdmin, async (req, res) => {
   const { id } = req.params as { id: string };
   const template = await prisma.pricingLineItemTemplate.findFirst({ where: { id } });
   if (!template) return res.status(404).json({ error: 'Template not found' });
@@ -96,7 +97,7 @@ pricingTemplatesRouter.put('/templates/:id', async (req, res) => {
   }
 });
 
-pricingTemplatesRouter.delete('/templates/:id', async (req, res) => {
+pricingTemplatesRouter.delete('/templates/:id', requireAdmin, async (req, res) => {
   const { id } = req.params as { id: string };
   const template = await prisma.pricingLineItemTemplate.findFirst({ where: { id } });
   if (!template) return res.status(404).json({ error: 'Template not found' });
