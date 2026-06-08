@@ -70,21 +70,32 @@ If you'd rather control exactly who can register (vs. anyone with a `@savacation
 
 ---
 
-## 2. Backend on Render
+## 2. Backend on Railway
+
+The backend deploys to Railway as one **service** (the Express API) plus a **PostgreSQL** database in the same project. Config lives in `backend/railway.json` (build/start/healthcheck + a `preDeployCommand` that runs migrations).
 
 1. Push this repo to GitHub.
-2. In Render: **New + → Blueprint**, point at this repo. `render.yaml` provisions the API web service and a managed Postgres.
-3. Set the `sync: false` env vars in the Render dashboard:
+2. In Railway: **New Project → Deploy from GitHub repo** → select this repo.
+3. Open the created service → **Settings**:
+   - **Root Directory** = `/backend` (so Railway builds the API, not the repo root).
+   - **Config-as-code file path** = `/backend/railway.json` (Railway's config file does **not** follow the root directory, so this absolute path is required).
+4. Add the database: **+ New → Database → PostgreSQL** (in the same project).
+5. On the API service → **Variables**, set:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference the Postgres service; rename `Postgres` if your DB service has a different name)
+   - `NODE_ENV` = `production`
    - `AUTH0_ISSUER_BASE_URL` = `https://YOUR-TENANT.us.auth0.com/` (trailing slash)
    - `AUTH0_AUDIENCE` = `https://api.itineraryplanner`
+   - `AUTH0_NAMESPACE` = `https://itineraryplanner`
+   - `AUTH0_ROLES_CLAIM` = `https://itineraryplanner/roles`
+   - `ALLOWED_EMAIL_DOMAIN` = `savacations.com`
    - `CORS_ORIGIN` = `https://YOUR-APP.netlify.app` (your Netlify origin; comma-separate to allow more)
    - `OPENAI_API_KEY`, `RESEND_API_KEY` (optional features)
-   - (`AUTH0_NAMESPACE`, `AUTH0_ROLES_CLAIM`, `ALLOWED_EMAIL_DOMAIN`, `NODE_VERSION`, `NODE_ENV` are preset in `render.yaml`.)
-4. `DATABASE_URL` is wired automatically from the managed database. Migrations run during the build (`buildCommand` ends with `npm run db:deploy`, i.e. `prisma migrate deploy`), so they apply on every deploy without a paid instance.
+6. Deploy. Build runs `npm run build`; the `preDeployCommand` runs `prisma migrate deploy` against the database before the new version goes live. Railway injects `PORT` automatically (the server reads `process.env.PORT`).
+7. Under **Settings → Networking**, generate a public domain. Verify `https://<your-app>.up.railway.app/health`.
 
-> The database uses the paid `basic-256mb` tier (~$6/mo + storage) so data persists; the free tier expires after 30 days. The **web service** is still `plan: free`, so it sleeps when idle and the first request after idle is slow — upgrade the web service to a paid plan if you want it always-on.
->
-> We run migrations in the `buildCommand` because Render's dedicated `preDeployCommand` requires a paid instance type. If you upgrade the web service, move `npm run db:deploy` from `buildCommand` to `preDeployCommand` so it runs after build, just before traffic cuts over.
+> The Prisma CLI is in `dependencies` (not `devDependencies`) so `prisma migrate deploy` works at deploy time even if dev deps are pruned.
+
+> **Alternative — Render:** `render.yaml` is also included (Render Blueprint → provisions a `basic-256mb` Postgres + a web service, migrations run in the build command). Use either Railway *or* Render, not both.
 
 ---
 
@@ -92,7 +103,7 @@ If you'd rather control exactly who can register (vs. anyone with a `@savacation
 
 1. In Netlify: **Add new site → Import from Git**, point at this repo. `netlify.toml` sets base `web`, build `npm run build`, publish `dist`, and the SPA redirect.
 2. Set environment variables (Site settings → Environment variables):
-   - `VITE_API_URL` = `https://itineraryplanner-api.onrender.com` (your Render API URL)
+   - `VITE_API_URL` = `https://<your-app>.up.railway.app` (your Railway API URL; or the Render URL if you used Render)
    - `VITE_AUTH0_DOMAIN` = `YOUR-TENANT.us.auth0.com`
    - `VITE_AUTH0_CLIENT_ID` = SPA client id
    - `VITE_AUTH0_AUDIENCE` = `https://api.itineraryplanner`
