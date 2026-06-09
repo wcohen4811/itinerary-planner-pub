@@ -2,7 +2,7 @@
 [build]
   base = "web"
   command = "npm run build"
-  publish = "dist"
+  publish = "web/dist"
 
 # SPA fallback so client-side routes (e.g. /clients, /admin) resolve to index.html.
 [[redirects]]
@@ -12,8 +12,9 @@
 
 # Set the following environment variables in the Netlify dashboard (Site
 # settings → Environment variables); they are baked into the build:
-#   VITE_API_URL            = https://itineraryplanner-api.onrender.com
+#   VITE_API_URL            = https://itineraryplanner-api-production.up.railway.app
 #   VITE_AUTH0_DOMAIN       = your-tenant.us.auth0.com
 #   VITE_AUTH0_CLIENT_ID    = <SPA client id>
 #   VITE_AUTH0_AUDIENCE     = https://api.itineraryplanner
 #   VITE_AUTH0_ROLES_CLAIM  = https://itineraryplanner/roles
+#   VITE_ALLOWED_EMAIL_DOMAIN = savacations.com

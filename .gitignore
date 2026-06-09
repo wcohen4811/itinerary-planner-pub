@@ -7,3 +7,9 @@ node_modules/
 **/.env.*
 !.env.example
 !**/.env.example
+
+# Local Netlify folder
+.netlify
+
+# Local CLI tooling (netlify-cli, railway cli) installed for deployment
+.tooling/
