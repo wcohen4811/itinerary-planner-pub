@@ -17,10 +17,15 @@ import { pricingTemplatesRouter } from './routes/pricingTemplates.js';
 import { proposalsRouter } from './routes/proposals.js';
 import { clientsRouter } from './routes/clients.js';
 import { proposalsEmailRouter } from './routes/proposalsEmail.js';
-import { requireAuth, attachUser, requireAdmin } from './middleware/auth.js';
+import { requireAuth, attachUser, requireAdmin, authConfigured } from './middleware/auth.js';
 export function createServer() {
     const app = express();
     const isProd = process.env.NODE_ENV === 'production';
+    // Fail closed: never serve production traffic with the permissive dev-auth
+    // fallback. If Auth0 is not configured in prod, refuse to start.
+    if (isProd && !authConfigured) {
+        throw new Error('Refusing to start: AUTH0_AUDIENCE and AUTH0_ISSUER_BASE_URL must be set in production.');
+    }
     // Security headers
     app.use(helmet());
     // CORS: lock to explicit origins in production; allow all only in local dev.
