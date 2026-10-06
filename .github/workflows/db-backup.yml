@@ -1,0 +1,56 @@
+name: Database Backup
+
+# Scheduled logical backups of the production Postgres database.
+# The dump is stored as a downloadable workflow artifact (retained 90 days).
+#
+# Setup (one-time): add a repository secret named BACKUP_DATABASE_URL whose
+# value is the Railway Postgres "DATABASE_PUBLIC_URL" (Railway dashboard ->
+# itineraryplanner-db -> Variables -> DATABASE_PUBLIC_URL).
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # daily at 07:00 UTC
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Dump production database
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_DATABASE_URL:-}" ]; then
+            echo "::error::BACKUP_DATABASE_URL secret is not set. Add it in repo Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          mkdir -p backups
+          TS="$(date -u +%Y%m%d_%H%M%S)"
+          OUT="backups/itineraryplanner_prod_${TS}.sql"
+          # Use the Postgres 18 client (matches the server major version) via Docker
+          # so pg_dump is never older than the server. The URL is passed through an
+          # env var inside the container so it is not expanded into the command line.
+          docker run --rm -e PGCONN="${BACKUP_DATABASE_URL}" postgres:18-alpine \
+            sh -c 'pg_dump "$PGCONN" --no-owner --no-privileges' > "${OUT}"
+          echo "Backup written:"
+          ls -lh "${OUT}"
+          # Sanity check: fail if the dump is suspiciously small / empty.
+          if [ "$(wc -c < "${OUT}")" -lt 1000 ]; then
+            echo "::error::Backup file is unexpectedly small; failing."
+            exit 1
+          fi
+          echo "BACKUP_FILE=${OUT}" >> "${GITHUB_ENV}"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backups/*.sql
+          retention-days: 90
+          if-no-files-found: error

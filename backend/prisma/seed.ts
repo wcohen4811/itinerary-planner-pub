@@ -3,15 +3,30 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Wipe existing data (order matters due to FKs)
-  await prisma.day.deleteMany({});
-  await prisma.itinerary.deleteMany({});
-  await prisma.destinationActivityPrice.deleteMany({});
-  await prisma.destinationActivity.deleteMany({});
-  await prisma.destinationTransferPrice.deleteMany({});
-  await prisma.destinationAccommodationPrice.deleteMany({});
-  await prisma.destination.deleteMany({});
-  await prisma.provider.deleteMany({});
+  // SAFETY: wiping existing data is destructive and must NEVER run against a
+  // real/production database. It only happens when SEED_RESET=true is passed
+  // explicitly, and is hard-blocked whenever NODE_ENV=production or the
+  // connection points at a non-local host (e.g. a Railway proxy).
+  const allowReset = process.env.SEED_RESET === 'true';
+  if (allowReset) {
+    const dbUrl = process.env.DATABASE_URL ?? '';
+    const isLocalDb = /@(localhost|127\.0\.0\.1|db)[:/]/.test(dbUrl);
+    if (process.env.NODE_ENV === 'production' || !isLocalDb) {
+      throw new Error(
+        'Refusing to wipe data: SEED_RESET is only allowed against a local database ' +
+          '(NODE_ENV must not be production and DATABASE_URL must be localhost/db).',
+      );
+    }
+    // Wipe existing data (order matters due to FKs) — local reset only.
+    await prisma.day.deleteMany({});
+    await prisma.itinerary.deleteMany({});
+    await prisma.destinationActivityPrice.deleteMany({});
+    await prisma.destinationActivity.deleteMany({});
+    await prisma.destinationTransferPrice.deleteMany({});
+    await prisma.destinationAccommodationPrice.deleteMany({});
+    await prisma.destination.deleteMany({});
+    await prisma.provider.deleteMany({});
+  }
 
   // Provider (organizer)
   const provider = await prisma.provider.upsert({
@@ -130,6 +145,14 @@ async function main() {
         });
       }
     }
+  }
+
+  // Don't create or duplicate the sample itinerary if the database already has
+  // itineraries. This lets the seed be re-run safely to (re)populate reference
+  // data (providers/destinations/pricing) without ever touching real content.
+  if ((await prisma.itinerary.count()) > 0) {
+    console.log('Seed complete: reference data ensured; existing itineraries left untouched.');
+    return;
   }
 
   // Seed sample itinerary “Classic Machu Picchu”
