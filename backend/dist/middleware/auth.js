@@ -6,6 +6,24 @@ const NAMESPACE = process.env.AUTH0_NAMESPACE || 'https://itineraryplanner';
 const ROLES_CLAIM = process.env.AUTH0_ROLES_CLAIM || `${NAMESPACE}/roles`;
 const EMAIL_CLAIM = `${NAMESPACE}/email`;
 const EMAIL_VERIFIED_CLAIM = `${NAMESPACE}/email_verified`;
+function parseCsv(value) {
+    return (value ?? '')
+        .split(',')
+        .map((part) => part.trim().toLowerCase())
+        .filter(Boolean);
+}
+/** Domains that may sign in. Defaults to savacations.com. Do not add gmail.com. */
+export const ALLOWED_EMAIL_DOMAINS = parseCsv(process.env.ALLOWED_EMAIL_DOMAINS || process.env.ALLOWED_EMAIL_DOMAIN || 'savacations.com');
+/** Specific addresses allowed in addition to those domains. */
+export const ALLOWED_EMAILS = parseCsv(process.env.ALLOWED_EMAILS);
+export function isEmailAllowed(email) {
+    if (!email)
+        return false;
+    const normalized = email.trim().toLowerCase();
+    if (ALLOWED_EMAILS.some((allowed) => allowed === normalized))
+        return true;
+    return ALLOWED_EMAIL_DOMAINS.some((domain) => normalized.endsWith('@' + domain));
+}
 /**
  * Auth is "configured" (and therefore enforced) when an Auth0 API audience and
  * issuer are present. In production these MUST be set. When they are absent
@@ -54,10 +72,15 @@ export async function attachUser(req, res, next) {
         const claimEmail = typeof payload?.[EMAIL_CLAIM] === 'string' ? payload[EMAIL_CLAIM] : null;
         const email = claimEmail ?? (typeof payload?.email === 'string' ? payload.email : null);
         const emailVerified = payload?.[EMAIL_VERIFIED_CLAIM] ?? payload?.email_verified;
-        // Who may sign in is decided in Auth0 (any email domain). The API only
-        // requires a verified email on a real Auth0 session.
-        if (authConfigured && emailVerified === false) {
-            return res.status(403).json({ error: 'Email not verified' });
+        // Defense-in-depth. The Auth0 Login Action is the authoritative gate and
+        // must use the same domain list and address allowlist.
+        if (authConfigured) {
+            if (!isEmailAllowed(email)) {
+                return res.status(403).json({ error: 'This account is not allowed to use the app' });
+            }
+            if (emailVerified === false) {
+                return res.status(403).json({ error: 'Email not verified' });
+            }
         }
         const name = (typeof payload?.name === 'string' && payload.name) ||
             (typeof payload?.nickname === 'string' && payload.nickname) ||

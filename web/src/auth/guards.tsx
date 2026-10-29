@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth, authConfigured } from './auth';
 import { setAuthTokenProvider } from '../api/client';
 import VerifyEmail from '../pages/VerifyEmail';
+import AccessDenied from '../pages/AccessDenied';
 
 function FullScreen({ children }: { children: ReactNode }) {
   return (
@@ -26,15 +27,17 @@ export function AuthBridge() {
   return null;
 }
 
-type Decision = 'loading' | 'login' | 'verify' | 'forbidden' | 'ok';
+type Decision = 'loading' | 'login' | 'denied' | 'verify' | 'forbidden' | 'ok';
 
 function useAccessDecision(requireAdmin: boolean): Decision {
-  const { isLoading, isAuthenticated, emailVerified, isAdmin } = useAuth();
+  const { isLoading, isAuthenticated, emailVerified, emailAllowed, isAdmin } = useAuth();
   if (isLoading) return 'loading';
   if (!isAuthenticated) return 'login';
-  // Verification is enforced only against a real Auth0 session. Email domain
-  // is not restricted — Auth0 decides who may sign in.
-  if (authConfigured && !emailVerified) return 'verify';
+  // Domain, address allowlist, and verification apply only to a real Auth0 session.
+  if (authConfigured) {
+    if (!emailAllowed) return 'denied';
+    if (!emailVerified) return 'verify';
+  }
   if (requireAdmin && !isAdmin) return 'forbidden';
   return 'ok';
 }
@@ -45,6 +48,8 @@ function render(decision: Decision, children: ReactNode) {
       return <FullScreen>Loading…</FullScreen>;
     case 'login':
       return <Navigate to="/login" replace />;
+    case 'denied':
+      return <AccessDenied />;
     case 'verify':
       return <VerifyEmail />;
     case 'forbidden':
@@ -54,7 +59,7 @@ function render(decision: Decision, children: ReactNode) {
   }
 }
 
-/** Requires an authenticated, email-verified Auth0 session. */
+/** Requires an authenticated, allowed, email-verified Auth0 session. */
 export function RequireAuth({ children }: { children: ReactNode }) {
   return render(useAccessDecision(false), children);
 }

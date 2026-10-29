@@ -7,6 +7,27 @@ const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID;
 const audience = import.meta.env.VITE_AUTH0_AUDIENCE;
 const ROLES_CLAIM = import.meta.env.VITE_AUTH0_ROLES_CLAIM || 'https://itineraryplanner/roles';
 
+function parseCsv(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Domains that may sign in. Defaults to savacations.com. Do not add gmail.com. */
+export const ALLOWED_EMAIL_DOMAINS = parseCsv(
+  import.meta.env.VITE_ALLOWED_EMAIL_DOMAINS || import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || 'savacations.com',
+);
+/** Specific addresses allowed in addition to those domains. Public in the bundle. */
+export const ALLOWED_EMAILS = parseCsv(import.meta.env.VITE_ALLOWED_EMAILS);
+
+export function isEmailAllowed(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  if (ALLOWED_EMAILS.some((allowed) => allowed === normalized)) return true;
+  return ALLOWED_EMAIL_DOMAINS.some((domain) => normalized.endsWith('@' + domain));
+}
+
 /**
  * Auth is enforced when an Auth0 domain + client id are configured. Without
  * them (local dev) the app falls back to a permissive dev identity so it stays
@@ -23,6 +44,7 @@ export type AuthState = {
   user: AuthUser | null;
   email: string | null;
   emailVerified: boolean;
+  emailAllowed: boolean;
   roles: string[];
   isAdmin: boolean;
   login: () => void;
@@ -78,6 +100,7 @@ function useRealAuth(): AuthState {
       : null,
     email,
     emailVerified,
+    emailAllowed: isEmailAllowed(email),
     roles,
     isAdmin: roles.includes('admin'),
     login: () => void a.loginWithRedirect(),
@@ -96,6 +119,7 @@ function useDevAuth(): AuthState {
     user: { name: 'Local Dev', email: 'dev@local.test' },
     email: 'dev@local.test',
     emailVerified: true,
+    emailAllowed: true,
     roles: ['admin', 'user'],
     isAdmin: true,
     login: () => {},
