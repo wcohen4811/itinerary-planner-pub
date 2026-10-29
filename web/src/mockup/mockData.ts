@@ -374,19 +374,19 @@ export const seedEmailFormats: MockEmailFormat[] = [
     id: 'fmt-follow',
     name: 'Follow-up',
     subject: 'Checking in on {{itinerary}}',
-    body: 'Hi {{firstName}},\n\nJust checking in on the {{itinerary}} proposal. Happy to adjust dates or lodges if you want a different pace.\n\nWilliam',
+    body: 'Hi {{firstName}},\n\nJust checking in on the {{itinerary}} proposal. Happy to adjust dates or lodges if you want a different pace.\n\nSavtrails',
   },
   {
     id: 'fmt-proposal',
     name: 'Proposal attached',
     subject: 'Your {{itinerary}} proposal',
-    body: 'Hi {{firstName}},\n\nI’ve attached the {{itinerary}} proposal ({{quoted}}). Open it when you have a moment and tell me what you’d like to lock in.\n\nWilliam',
+    body: 'Hi {{firstName}},\n\nI’ve attached the {{itinerary}} proposal ({{quoted}}). Open it when you have a moment and tell me what you’d like to lock in.\n\nSavtrails',
   },
   {
     id: 'fmt-checkin',
     name: 'Check-in',
     subject: 'Quick note on your trip',
-    body: 'Hi {{firstName}},\n\nHope planning is going smoothly. Anything you want me to add to {{itinerary}}?\n\nWilliam',
+    body: 'Hi {{firstName}},\n\nHope planning is going smoothly. Anything you want me to add to {{itinerary}}?\n\nSavtrails',
   },
   {
     id: 'fmt-blank',
@@ -414,7 +414,7 @@ export type MockEmailMessage = {
 };
 
 export const seedEmailMessages: MockEmailMessage[] = [
-  { id: 'em-am-1', clientId: 'cl-amelia', dir: 'in', kind: 'note', subject: 'Garden Route dates', body: 'Hi William — November 12 still works for us. Can you send a luxury version?', at: 'Oct 8, 2026 9:14 AM' },
+  { id: 'em-am-1', clientId: 'cl-amelia', dir: 'in', kind: 'note', subject: 'Garden Route dates', body: 'Hi — November 12 still works for us. Can you send a luxury version?', at: 'Oct 8, 2026 9:14 AM' },
   { id: 'em-am-2', clientId: 'cl-amelia', dir: 'out', kind: 'proposal', subject: "Amelia's Trip to Garden Route", body: 'Hi Amelia,\n\nProposal attached for the Garden Route honeymoon — $13,480 for two. Lodges are held informally through mid-November.', at: 'Oct 12, 2026 4:18 PM', proposalId: 'pr-1', tracking: 'clicked' },
   { id: 'em-am-3', clientId: 'cl-amelia', dir: 'in', kind: 'note', subject: 'Re: Garden Route', body: 'This looks perfect. We’ll take it — please book.', at: 'Oct 13, 2026 10:02 AM' },
   { id: 'em-ja-1', clientId: 'cl-james', dir: 'out', kind: 'proposal', subject: "James's Trip to Kruger Safari", body: 'Hi James,\n\nKruger + Vic Falls for four. Quoted $36,600. Let me know if you want morning drives only.', at: 'Oct 9, 2026 11:02 AM', proposalId: 'pr-2', tracking: 'clicked' },
@@ -699,7 +699,7 @@ export const mockSalesSnapshot = rollupSales(mockTrackedProposals);
 
 export const mockAiBriefing: MockAiBriefing = {
   date: '2026-10-14',
-  greeting: 'Welcome back, William.',
+  greeting: 'Welcome back.',
   body: 'Garden Route inquiries are leading this week. Two honeymoon forms landed overnight — worth a morning pass through New Clients.',
   salesLine: salesLine(mockSalesSnapshot),
   source: 'ai-briefing',

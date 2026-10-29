@@ -279,7 +279,7 @@ export default function ProposalsMock({
                   <option key={c.id} value={c.id}>{c.first} {c.last}</option>
                 ))}
               </select>
-              <input className="cmd-input" defaultValue="William Cohen" />
+              <input className="cmd-input" defaultValue="Demo Planner" />
               <input className="cmd-input" defaultValue="2" />
               <input type="date" className="cmd-input" defaultValue="2026-11-12" />
               <select className="cmd-select md:col-span-2">
@@ -351,7 +351,7 @@ export default function ProposalsMock({
                 <p className="text-xs uppercase tracking-widest text-slate-400">SA Vacations</p>
                 <p className="font-black text-xl">Garden Route Honeymoon</p>
               </div>
-              <p className="text-xs text-slate-500">Prepared by William Cohen</p>
+              <p className="text-xs text-slate-500">Prepared by Demo Planner</p>
             </div>
             <p className="italic text-slate-600">Dear Amelia — a tailored Garden Route for two…</p>
             <div className="bg-blue-50/80 p-3 rounded">

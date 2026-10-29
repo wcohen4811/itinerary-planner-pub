@@ -65,7 +65,7 @@ export default function AdminMock({
           </span>
           <div>
             <h2 className="text-2xl font-black">Admin</h2>
-            <p className="text-sm text-[#d5e2f2]">Signed in as William Cohen · administrator</p>
+            <p className="text-sm text-[#d5e2f2]">Signed in as Demo Planner · administrator</p>
           </div>
         </div>
         <HudButton icon="logout">Log out</HudButton>

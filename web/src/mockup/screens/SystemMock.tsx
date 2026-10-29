@@ -28,8 +28,8 @@ export default function SystemMock() {
               <div className="rounded-lg bg-[#263858] p-3 mb-4 flex items-center gap-3 text-left">
                 <span className="size-9 rounded-full bg-[#137fec]/20 text-[#137fec] flex items-center justify-center font-bold">W</span>
                 <div>
-                  <p className="text-sm font-semibold">William Cohen</p>
-                  <p className="text-xs text-[#d5e2f2]">wachwd97@gmail.com · administrator</p>
+                  <p className="text-sm font-semibold">Demo Planner</p>
+                  <p className="text-xs text-[#d5e2f2]">planner@example.com · administrator</p>
                 </div>
               </div>
               <HudButton tone="primary" icon="login" className="w-full">
@@ -43,7 +43,7 @@ export default function SystemMock() {
                 <span className="material-symbols-outlined">mark_email_unread</span>
               </span>
               <h2 className="text-xl font-black">Verify your email</h2>
-              <p className="text-sm text-[#d5e2f2] mt-2 mb-5">A verification message was sent to wachwd97@gmail.com.</p>
+              <p className="text-sm text-[#d5e2f2] mt-2 mb-5">A verification message was sent to planner@example.com.</p>
               <div className="flex flex-col gap-2">
                 <HudButton tone="primary" icon="refresh">
                   I've verified — check again
@@ -59,7 +59,7 @@ export default function SystemMock() {
               </span>
               <h2 className="text-xl font-black">Access restricted</h2>
               <p className="text-sm text-[#d5e2f2] mt-2 mb-5">
-                Only accounts on @savacations.com may enter. You are signed in as an outside address.
+                This Auth0 account is not permitted to use the app. Ask an administrator to grant access.
               </p>
               <HudButton tone="danger" icon="logout" className="w-full">
                 Log out and use a different account
