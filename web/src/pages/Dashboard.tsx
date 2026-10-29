@@ -16,16 +16,16 @@ function applyImportResolution(
   };
 }
 
-function WarningModal({
+function DeleteConfirmModal({
   open,
+  title,
   onClose,
-  onEdit,
-  onDuplicate,
+  onConfirm,
 }: {
   open: boolean;
+  title?: string;
   onClose: () => void;
-  onEdit: () => void;
-  onDuplicate: () => void;
+  onConfirm: () => void;
 }) {
   if (!open) return null;
   return (
@@ -36,31 +36,23 @@ function WarningModal({
         aria-modal="true"
         className="relative w-[95vw] max-w-lg rounded-lg bg-white p-6 shadow-lg"
       >
-        <h3 className="text-lg font-semibold mb-3">WARNING</h3>
+        <h3 className="text-lg font-semibold mb-3">Delete itinerary</h3>
         <p className="text-sm text-gray-700 mb-4">
-          You have selected an existing itinerary. Would you like to make edits to this version or make a duplicate version and create a new itinerary?
+          Are you sure you want to delete{title ? ` "${title}"` : ' this itinerary'}? This will remove all of its
+          days and cannot be undone.
         </p>
         <div className="flex items-center justify-end gap-2">
           <button className="px-3 py-2 text-sm rounded-md border" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="px-3 py-2 text-sm rounded-md border bg-white hover:bg-gray-50"
+            className="px-3 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700"
             onClick={() => {
-              onDuplicate();
+              onConfirm();
               onClose();
             }}
           >
-            Make a Duplicate
-          </button>
-          <button
-            className="px-3 py-2 text-sm rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
-            onClick={() => {
-              onEdit();
-              onClose();
-            }}
-          >
-            Edit this Version
+            Delete
           </button>
         </div>
       </div>
@@ -758,14 +750,13 @@ export default function Dashboard() {
   const b = useDashboardBackend();
   const { isAdmin } = useAuth();
   const selected = b.getSelected();
-  const [showWarning, setShowWarning] = useState(false);
+  const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
   const [crmView, setCrmView] = useState<'itineraries' | 'pricing-library'>('itineraries');
   const [pricingFlips, setPricingFlips] = useState<Record<string, boolean>>({});
   const [pricingPanelOpen, setPricingPanelOpen] = useState(false);
   const [isListOpen, setIsListOpen] = useState(true);
   const [tempTitle, setTempTitle] = useState('');
   const [descValue, setDescValue] = useState('');
-  const [pendingId, setPendingId] = useState<string | null>(null);
   const [pubOpen, setPubOpen] = useState(false);
   const [pubDone, setPubDone] = useState(false);
   const [pubError, setPubError] = useState<string | null>(null);
@@ -1828,18 +1819,41 @@ export default function Dashboard() {
                   return (
                     <div
                       key={it.id}
-                      className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors ${
+                      className={`group flex items-center px-4 py-3 cursor-pointer transition-colors ${
                         selectedRow
                           ? 'bg-blue-50 dark:bg-primary/10 border-l-4 border-primary'
                           : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 border-l-4 border-transparent border-b border-gray-100 dark:border-gray-800/50'
                       }`}
-                      onClick={() => {
-                        setPendingId(it.id);
-                        setShowWarning(true);
-                      }}
+                      onClick={() => void b.selectItinerary(it.id)}
                     >
+                      <div className="flex items-center gap-1 overflow-hidden shrink-0 w-0 opacity-0 group-hover:w-[64px] group-hover:opacity-100 group-hover:mr-2 transition-all duration-200 ease-out">
+                        <button
+                          type="button"
+                          title="Delete itinerary"
+                          aria-label="Delete itinerary"
+                          className="flex items-center justify-center size-7 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletePendingId(it.id);
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">delete</span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Duplicate itinerary"
+                          aria-label="Duplicate itinerary"
+                          className="flex items-center justify-center size-7 rounded-md text-gray-400 hover:text-primary hover:bg-blue-50 dark:hover:bg-primary/10 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void b.duplicateFrom(it.id, { select: false });
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">content_copy</span>
+                        </button>
+                      </div>
                       <div
-                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-lg size-12 shrink-0 shadow-sm"
+                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-lg size-12 shrink-0 shadow-sm mr-4"
                         style={{ backgroundImage: `url("${coverImages[idx % coverImages.length]}")` }}
                       ></div>
                       <div className="flex flex-col justify-center flex-1 min-w-0">
@@ -1866,16 +1880,14 @@ export default function Dashboard() {
 
       <div className="flex-1 flex flex-col bg-background-light dark:bg-[#0b1219] min-w-0 relative">{mainContent}</div>
 
-      <WarningModal
-        open={showWarning}
-        onClose={() => setShowWarning(false)}
-        onEdit={() => {
-          if (pendingId) {
-            b.selectItinerary(pendingId);
+      <DeleteConfirmModal
+        open={!!deletePendingId}
+        title={b.items.find((it) => it.id === deletePendingId)?.title}
+        onClose={() => setDeletePendingId(null)}
+        onConfirm={() => {
+          if (deletePendingId) {
+            void b.deleteItinerary(deletePendingId);
           }
-        }}
-        onDuplicate={() => {
-          b.duplicateFrom(pendingId);
         }}
       />
       <PublishModal

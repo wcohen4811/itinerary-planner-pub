@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { beginSilent, endSilent } from '../api/loading';
 import type { PricingLineItem, PricingDayItems, PricingTemplate, Occupancy, ItineraryMessageTemplate } from '../api/client';
 import type { Day, ItineraryWithDays } from '../api/client';
 
@@ -292,6 +293,7 @@ export function useDashboardBackend() {
 
     savingRef.current = true;
     setAutosaveStatus('saving');
+    beginSilent();
     try {
       if (Object.keys(itPatch).length) {
         await api.updateItinerary(selId, itPatch);
@@ -356,6 +358,7 @@ export function useDashboardBackend() {
     } catch {
       setAutosaveStatus('error');
     } finally {
+      endSilent();
       savingRef.current = false;
       if (pendingRef.current) {
         pendingRef.current = false;
@@ -498,7 +501,7 @@ export function useDashboardBackend() {
     await qc.invalidateQueries({ queryKey: ['dash-itins'] });
   }
 
-  async function duplicateFrom(id: string | null) {
+  async function duplicateFrom(id: string | null, opts?: { select?: boolean }) {
     const sourceId = id ?? selectedId;
     if (!sourceId) return;
     const res = await api.getItinerary(sourceId);
@@ -529,7 +532,9 @@ export function useDashboardBackend() {
       });
     }
     await qc.invalidateQueries({ queryKey: ['dash-itins'] });
-    await selectItinerary(newId);
+    if (opts?.select !== false) {
+      await selectItinerary(newId);
+    }
   }
 
   async function createItineraryBlank(opts: {

@@ -1,5 +1,12 @@
 # Itinerary Planner
 
+**Command center mockup — no login required.** It is a visual-only screen and is not behind Auth0.
+
+1. From the repo root: `cd web && npm install && npm run dev`
+2. Open [http://localhost:5173/command](http://localhost:5173/command)
+
+On the deployed site, use the same path: `/command` (for example `https://savtrails.com/command`). The rest of the app still requires sign-in.
+
 A production-focused itinerary planning platform with a React frontend and a TypeScript/Express API backed by Postgres + Prisma.
 
 The project is designed around domain objects (Itinerary, Day, Pricing Items, Templates, Client, Proposal) and service-layer process optimization so planning workflows stay consistent, scalable, and auditable.

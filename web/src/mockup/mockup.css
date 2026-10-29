@@ -1,0 +1,390 @@
+/* Isolated HUD theme for the /command mockup. Always-dark; no dark: variants.
+   State 01 lift: brighter navy, stronger type, more hub motion. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+.cmd-root {
+  --cmd-bg: #1c2b4a;
+  --cmd-panel: #24355a;
+  --cmd-panel-2: #2a3d64;
+  --cmd-panel-3: #334873;
+  --cmd-line: rgba(56, 189, 248, 0.45);
+  --cmd-line-strong: rgba(125, 211, 252, 0.85);
+  --cmd-accent: #38bdf8;
+  --cmd-cyan: #7dd3fc;
+  --cmd-text: #f8fbff;
+  --cmd-muted: #d5e2f2;
+  --cmd-danger: #ef4444;
+  --cmd-ok: #34d399;
+  --cmd-warn: #fbbf24;
+  font-family: Inter, 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: var(--cmd-text);
+  background: var(--cmd-bg);
+}
+
+.cmd-root h1,
+.cmd-root h2,
+.cmd-root h3,
+.cmd-welcome-title {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.cmd-mono {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.cmd-root * {
+  box-sizing: border-box;
+}
+
+.cmd-void {
+  background:
+    radial-gradient(ellipse 42% 36% at 50% 50%, rgba(186, 230, 253, 0.22), transparent 58%),
+    radial-gradient(ellipse 70% 50% at 12% 8%, rgba(56, 189, 248, 0.1), transparent 52%),
+    radial-gradient(ellipse 60% 40% at 88% 92%, rgba(129, 140, 248, 0.14), transparent 50%),
+    radial-gradient(ellipse 90% 80% at 50% 50%, #16325a 0%, #0d1b36 68%, #081224 100%);
+}
+
+.cmd-aurora {
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 48% 18% at 28% 18%, rgba(56, 189, 248, 0.16), transparent 70%),
+    radial-gradient(ellipse 40% 16% at 76% 78%, rgba(167, 139, 250, 0.12), transparent 70%);
+  animation: cmd-aurora-shift 14s ease-in-out infinite alternate;
+}
+@keyframes cmd-aurora-shift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); opacity: 0.7; }
+  to { transform: translate3d(2%, 1%, 0) scale(1.06); opacity: 1; }
+}
+
+.cmd-dust {
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1px 1px at 28% 68%, rgba(186,230,253,0.8), transparent),
+    radial-gradient(1.5px 1.5px at 63% 18%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 81% 42%, rgba(251,191,36,0.55), transparent),
+    radial-gradient(1.5px 1.5px at 44% 82%, rgba(186,230,253,0.7), transparent),
+    radial-gradient(1px 1px at 9% 88%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 92% 12%, rgba(125,211,252,0.7), transparent),
+    radial-gradient(1.5px 1.5px at 71% 61%, rgba(255,255,255,0.45), transparent);
+  animation: cmd-dust-drift 22s linear infinite;
+}
+@keyframes cmd-dust-drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-24px); }
+}
+
+.cmd-scan {
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(76, 201, 240, 0.07) 50%,
+    transparent 100%
+  );
+  background-size: 100% 220%;
+  animation: cmd-scan 7s linear infinite;
+}
+
+@keyframes cmd-scan {
+  0% { background-position: 0 -80%; }
+  100% { background-position: 0 180%; }
+}
+
+.cmd-sweep {
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(19, 127, 236, 0.08) 28deg,
+    transparent 55deg
+  );
+  animation: cmd-orbit 18s linear infinite;
+}
+
+.cmd-glow {
+  box-shadow: 0 0 0 1px var(--cmd-line), 0 0 28px rgba(19, 127, 236, 0.2);
+}
+
+.cmd-glow-strong {
+  box-shadow: 0 0 0 1px var(--cmd-line-strong), 0 0 36px rgba(19, 127, 236, 0.4);
+}
+
+.cmd-brackets {
+  position: relative;
+}
+.cmd-brackets::before,
+.cmd-brackets::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--cmd-accent);
+  border-style: solid;
+  pointer-events: none;
+}
+.cmd-brackets::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1.5px 0 0 1.5px;
+}
+.cmd-brackets::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1.5px 1.5px 0;
+}
+
+.cmd-pulse {
+  animation: cmd-pulse 2.8s ease-in-out infinite;
+}
+@keyframes cmd-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+.cmd-orbit {
+  animation: cmd-orbit 28s linear infinite;
+}
+.cmd-orbit-fast {
+  animation: cmd-orbit 14s linear infinite;
+}
+.cmd-orbit-rev {
+  animation: cmd-orbit 22s linear infinite reverse;
+}
+@keyframes cmd-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.cmd-core-aura {
+  animation: cmd-core-aura 3.4s ease-in-out infinite;
+}
+@keyframes cmd-core-aura {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.16), 0 0 42px rgba(56, 189, 248, 0.55);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 18px rgba(125, 211, 252, 0.08), 0 0 70px rgba(186, 230, 253, 0.7);
+    transform: scale(1.05);
+  }
+}
+
+.cmd-core-ring {
+  animation: cmd-core-ring 2.6s ease-in-out infinite;
+}
+@keyframes cmd-core-ring {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.cmd-spoke {
+  stroke-dasharray: 2 1.6;
+  animation: cmd-spoke-flow 3.2s linear infinite;
+}
+@keyframes cmd-spoke-flow {
+  to { stroke-dashoffset: -12; }
+}
+
+.cmd-fade-in {
+  animation: cmd-fade-in 280ms ease-out;
+}
+@keyframes cmd-fade-in {
+  from { opacity: 0; transform: scale(0.98) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.cmd-node-in {
+  animation: cmd-node-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes cmd-node-in {
+  from { opacity: 0; transform: scale(0.82) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.cmd-node-idle {
+  animation:
+    cmd-node-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    cmd-node-idle 4.4s ease-in-out 620ms infinite;
+}
+@keyframes cmd-node-idle {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(19, 127, 236, 0.42), 0 0 18px rgba(19, 127, 236, 0.16); }
+  50% { box-shadow: 0 0 0 1px rgba(19, 127, 236, 0.7), 0 0 26px rgba(19, 127, 236, 0.32); }
+}
+
+.cmd-welcome-eyebrow {
+  animation: cmd-welcome-in 700ms ease-out both;
+}
+.cmd-welcome-title {
+  animation: cmd-welcome-in 860ms ease-out 120ms both;
+}
+.cmd-welcome-title h1 {
+  text-shadow: none;
+}
+.cmd-welcome-sub {
+  animation: cmd-welcome-in 900ms ease-out 240ms both;
+}
+@keyframes cmd-welcome-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cmd-welcome-underline {
+  height: 2px;
+  width: 0;
+  margin: 10px auto 0;
+  background: linear-gradient(90deg, transparent, #38bdf8, #e0f2fe, transparent);
+  animation: cmd-welcome-line 1.2s ease-out 420ms both;
+}
+@keyframes cmd-welcome-line {
+  from { width: 0; opacity: 0; }
+  to { width: 220px; opacity: 1; }
+}
+
+.cmd-input,
+.cmd-select,
+.cmd-textarea {
+  width: 100%;
+  background: #263858;
+  border: 1px solid rgba(19, 127, 236, 0.38);
+  color: var(--cmd-text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+}
+.cmd-input:focus,
+.cmd-select:focus,
+.cmd-textarea:focus {
+  border-color: var(--cmd-accent);
+  box-shadow: 0 0 0 3px rgba(19, 127, 236, 0.22);
+}
+.cmd-select option {
+  background: #2a3d64;
+}
+
+.cmd-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.cmd-scroll::-webkit-scrollbar-thumb {
+  background: rgba(19, 127, 236, 0.4);
+  border-radius: 8px;
+}
+.cmd-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cmd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Shared hover language */
+.cmd-hover-node {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease, background-color 220ms ease;
+}
+.cmd-hover-node:hover {
+  animation-play-state: paused;
+  transform: translateY(-7px) scale(1.07);
+  box-shadow: 0 0 0 1px rgba(76, 201, 240, 0.95), 0 16px 36px rgba(19, 127, 236, 0.42);
+  background-color: #334873;
+}
+.cmd-hover-node:hover .cmd-node-icon {
+  transform: scale(1.12) rotate(-6deg);
+  background: rgba(19, 127, 236, 0.45);
+  color: #ffffff;
+}
+.cmd-node-icon {
+  transition: transform 220ms ease, background-color 220ms ease, color 220ms ease;
+}
+
+.cmd-hover-btn {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, filter 180ms ease;
+}
+.cmd-hover-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.16) 46%, transparent 70%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.cmd-hover-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow: 0 0 0 1px rgba(19, 127, 236, 0.45), 0 8px 18px rgba(19, 127, 236, 0.28);
+}
+.cmd-hover-btn:hover::after {
+  animation: cmd-shimmer 620ms ease;
+}
+.cmd-hover-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+@keyframes cmd-shimmer {
+  to { transform: translateX(120%); }
+}
+
+.cmd-hover-palette {
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.cmd-hover-palette:hover,
+.cmd-hover-palette:focus-within {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 0 0 1px rgba(76, 201, 240, 0.85), 0 0 28px rgba(19, 127, 236, 0.4);
+}
+
+.cmd-hover-core {
+  transition: transform 280ms ease;
+}
+.cmd-hover-core:hover {
+  transform: scale(1.06);
+}
+.cmd-hover-core:hover .cmd-core-face {
+  box-shadow: 0 0 0 1px rgba(76, 201, 240, 0.95), 0 0 42px rgba(19, 127, 236, 0.55);
+}
+
+.cmd-hover-nav {
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.cmd-hover-nav:hover {
+  color: #ffffff;
+  background: rgba(19, 127, 236, 0.2);
+  transform: translateY(-1px);
+}
+
+.cmd-hover-row {
+  transition: background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.cmd-hover-row:hover {
+  background: rgba(19, 127, 236, 0.12);
+  transform: translateX(4px);
+  box-shadow: inset 3px 0 0 #137fec;
+}
+
+.cmd-hover-icon {
+  transition: color 150ms ease, transform 150ms ease, background-color 150ms ease;
+}
+.cmd-hover-icon:hover {
+  transform: scale(1.18);
+}
+
+.cmd-hover-home {
+  transition: transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+.cmd-hover-home:hover {
+  animation: none;
+  transform: scale(1.12) rotate(-12deg);
+  background: rgba(19, 127, 236, 0.22);
+  box-shadow: 0 0 16px rgba(19, 127, 236, 0.45);
+}

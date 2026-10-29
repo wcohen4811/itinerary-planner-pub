@@ -13,6 +13,8 @@ import Login from './pages/Login';
 import AdminPortal from './pages/AdminPortal';
 import { AppAuthProvider } from './auth/auth';
 import { AuthBridge, RequireAuth, RequireAdmin } from './auth/guards';
+import GlobalLoadingOverlay from './components/GlobalLoadingOverlay';
+import CommandCenterMock from './mockup/CommandCenterMock';
 
 const queryClient = new QueryClient();
 
@@ -26,6 +28,7 @@ const router = createBrowserRouter([
   { path: '/itineraries/:id', element: <RequireAuth><ItineraryDetail /></RequireAuth> },
   { path: '/providers', element: <RequireAdmin><Providers /></RequireAdmin> },
   { path: '/admin', element: <RequireAdmin><AdminPortal /></RequireAdmin> },
+  { path: '/command', element: <CommandCenterMock /> },
 ]);
 
 createRoot(document.getElementById('root')!).render(
@@ -34,6 +37,7 @@ createRoot(document.getElementById('root')!).render(
       <AppAuthProvider>
         <AuthBridge />
         <RouterProvider router={router} />
+        <GlobalLoadingOverlay />
       </AppAuthProvider>
     </QueryClientProvider>
   </StrictMode>,

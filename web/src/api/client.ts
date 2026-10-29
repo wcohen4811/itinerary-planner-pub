@@ -1,3 +1,5 @@
+import { beginRequest, endRequest } from './loading';
+
 export type Itinerary = {
   id: string;
   title: string;
@@ -182,19 +184,24 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 async function http<T = any>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const authHeaders = await getAuthHeaders();
-  const res = await fetch(withBase(input), {
-    headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers || {}) },
-    ...init,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || res.statusText);
+  const counted = beginRequest();
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(withBase(input), {
+      headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers || {}) },
+      ...init,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || res.statusText);
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) return (await res.json()) as T;
+    // @ts-ignore
+    return null;
+  } finally {
+    endRequest(counted);
   }
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) return (await res.json()) as T;
-  // @ts-ignore
-  return null;
 }
 
 export type ImportTitleConflict = {
@@ -218,27 +225,32 @@ async function importItinerariesHttp(payload: unknown): Promise<{
   createdNewItinerary?: boolean[];
   createdItineraryIds: string[];
 }> {
-  const authHeaders = await getAuthHeaders();
-  const res = await fetch(withBase('/admin/import-itineraries'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
-    body: JSON.stringify(payload),
-  });
-  const ct = res.headers.get('content-type') || '';
-  const data = ct.includes('application/json') ? ((await res.json()) as Record<string, unknown>) : null;
+  const counted = beginRequest();
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(withBase('/admin/import-itineraries'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(payload),
+    });
+    const ct = res.headers.get('content-type') || '';
+    const data = ct.includes('application/json') ? ((await res.json()) as Record<string, unknown>) : null;
 
-  if (res.status === 409 && data && data.code === 'TITLE_EXISTS') {
-    throw new ImportTitleConflictError(data as unknown as ImportTitleConflict);
+    if (res.status === 409 && data && data.code === 'TITLE_EXISTS') {
+      throw new ImportTitleConflictError(data as unknown as ImportTitleConflict);
+    }
+    if (!res.ok) {
+      const msg = (data && typeof data.error === 'string' && data.error) || String(res.statusText);
+      throw new Error(msg);
+    }
+    return data as {
+      itineraryIds: string[];
+      createdNewItinerary?: boolean[];
+      createdItineraryIds: string[];
+    };
+  } finally {
+    endRequest(counted);
   }
-  if (!res.ok) {
-    const msg = (data && typeof data.error === 'string' && data.error) || String(res.statusText);
-    throw new Error(msg);
-  }
-  return data as {
-    itineraryIds: string[];
-    createdNewItinerary?: boolean[];
-    createdItineraryIds: string[];
-  };
 }
 
 export const api = {
