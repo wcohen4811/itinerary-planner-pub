@@ -8,7 +8,6 @@ const NAMESPACE = process.env.AUTH0_NAMESPACE || 'https://itineraryplanner';
 const ROLES_CLAIM = process.env.AUTH0_ROLES_CLAIM || `${NAMESPACE}/roles`;
 const EMAIL_CLAIM = `${NAMESPACE}/email`;
 const EMAIL_VERIFIED_CLAIM = `${NAMESPACE}/email_verified`;
-const ALLOWED_EMAIL_DOMAIN = (process.env.ALLOWED_EMAIL_DOMAIN || 'savacations.com').toLowerCase();
 
 /**
  * Auth is "configured" (and therefore enforced) when an Auth0 API audience and
@@ -73,16 +72,10 @@ export async function attachUser(req: Request, res: Response, next: NextFunction
     const emailVerified =
       (payload?.[EMAIL_VERIFIED_CLAIM] as boolean | undefined) ?? (payload?.email_verified as boolean | undefined);
 
-    // Defense-in-depth (authoritative check is the Auth0 Action). Only enforced
-    // against a real Auth0 session, and only when the claim is present so a
-    // misconfigured Action can't lock everyone out.
-    if (authConfigured) {
-      if (ALLOWED_EMAIL_DOMAIN && typeof email === 'string' && !email.toLowerCase().endsWith('@' + ALLOWED_EMAIL_DOMAIN)) {
-        return res.status(403).json({ error: `Access restricted to @${ALLOWED_EMAIL_DOMAIN} accounts` });
-      }
-      if (emailVerified === false) {
-        return res.status(403).json({ error: 'Email not verified' });
-      }
+    // Who may sign in is decided in Auth0 (any email domain). The API only
+    // requires a verified email on a real Auth0 session.
+    if (authConfigured && emailVerified === false) {
+      return res.status(403).json({ error: 'Email not verified' });
     }
     const name =
       (typeof payload?.name === 'string' && payload.name) ||

@@ -41,9 +41,6 @@ services:
         value: https://itineraryplanner
       - key: AUTH0_ROLES_CLAIM
         value: https://itineraryplanner/roles
-      # Defense-in-depth domain restriction (authoritative check is the Auth0 Action).
-      - key: ALLOWED_EMAIL_DOMAIN
-        value: savacations.com
       # Must equal the deployed Netlify origin (e.g. https://your-app.netlify.app).
       - key: CORS_ORIGIN
         sync: false

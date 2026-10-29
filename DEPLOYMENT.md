@@ -29,25 +29,21 @@ In the [Auth0 Dashboard](https://manage.auth0.com):
 3. Enable **RBAC** and **Add Permissions in the Access Token** for this API.
 
 ### c. Roles
-1. **User Management → Roles → Create Role** twice: `admin` and `user`.
-2. Assign roles to your team members under **User Management → Users → (user) → Roles**.
+1. **User Management → Roles → Create Role** named `admin`.
+2. Assign it under **User Management → Users → (user) → Roles**. Anyone Auth0 lets in can use the planner. The `admin` role is what unlocks admin features. Details for outside emails are in section e.
 
-### d. Login Action — restrict domain, require verification, inject claims
-**Actions → Library → Build Custom** (Login flow trigger), paste the following, deploy, and add it to the **Login** flow:
+### d. Login Action — inject roles and email claims
+**Actions → Library → Build Custom** (Login flow trigger), paste the following, deploy, and add it to the **Login** flow.
+
+If an older Action denies anyone who is not `@savacations.com`, replace it with this one. That deny runs before the app loads, so outside emails stay locked out until the Action is updated. Also remove any **Pre User Registration** Action that denies non-`@savacations.com` signups.
 
 ```js
 exports.onExecutePostLogin = async (event, api) => {
   const ns = 'https://itineraryplanner';
-  const allowedDomain = 'savacations.com';
-  const email = (event.user.email || '').toLowerCase();
 
-  // 1) Only allow @savacations.com accounts.
-  if (!email.endsWith('@' + allowedDomain)) {
-    return api.access.deny(`Access is restricted to @${allowedDomain} accounts.`);
-  }
-
-  // 2) Surface email + verification + roles to BOTH tokens (namespaced claims),
-  //    so the SPA and the API can read them.
+  // Any email domain may sign in. Who has an account is controlled in
+  // User Management. The `admin` role (assigned on the user) unlocks admin
+  // features; everyone else can use the rest of the app.
   const roles = event.authorization?.roles || [];
   api.idToken.setCustomClaim(`${ns}/roles`, roles);
   api.accessToken.setCustomClaim(`${ns}/roles`, roles);
@@ -61,12 +57,14 @@ exports.onExecutePostLogin = async (event, api) => {
 Notes:
 - The namespace must match `AUTH0_NAMESPACE`/`AUTH0_ROLES_CLAIM` (backend) and `VITE_AUTH0_ROLES_CLAIM` (frontend); default base is `https://itineraryplanner`.
 - **Email verification UX:** the app does not hard-deny unverified users at Auth0 — instead the SPA shows a "Verify your email" waiting screen (reading `email_verified` from the ID token) and the API rejects unverified tokens (403). If you'd prefer Auth0 to block unverified logins outright, add `if (!event.user.email_verified) return api.access.deny('Please verify your email first.');` to the Action (the waiting screen then won't be reachable).
-- **Database signups:** to stop non-domain accounts from being *created* at all, also add a **Pre User Registration** Action: `exports.onExecutePreUserRegistration = async (event, api) => { if (!(event.user.email||'').toLowerCase().endsWith('@savacations.com')) api.access.deny('domain_not_allowed', 'Signups limited to @savacations.com'); };`
 
-### e. (Optional) Allowlist instead of open domain signup
-If you'd rather control exactly who can register (vs. anyone with a `@savacations.com` address):
-- Turn **off** public signups: Connection settings → **Disable Sign Ups** on the Database connection, then create users manually under **User Management → Users → Create User** (or invite them). This is the simplest admin-controlled allowlist.
-- Or keep the Pre-User-Registration Action above and check the email against a hardcoded list / an external list before allowing registration.
+### e. Grant access and admin (any email)
+Access is whoever can log in through Auth0. Email domain is not checked.
+
+1. **Authentication → Database → Username-Password-Authentication → Disable Sign Ups**, if you want an allowlist. People then cannot self-register.
+2. **User Management → Users → Create User**. Use any email (`gmail.com`, `savacations.com`, and so on). They can use proposals, clients, itineraries, and the rest of the planner after they verify that email.
+3. **Admin:** open that user → **Roles** → assign `admin`. That unlocks `/admin`, providers, itinerary delete, and pricing-template writes. They must sign out and sign back in so the new role is in the token.
+4. Remove the role the same way to take admin away. Deleting or blocking the user in Auth0 removes app access entirely.
 
 ---
 
@@ -87,7 +85,6 @@ The backend deploys to Railway as one **service** (the Express API) plus a **Pos
    - `AUTH0_AUDIENCE` = `https://api.itineraryplanner`
    - `AUTH0_NAMESPACE` = `https://itineraryplanner`
    - `AUTH0_ROLES_CLAIM` = `https://itineraryplanner/roles`
-   - `ALLOWED_EMAIL_DOMAIN` = `savacations.com`
    - `CORS_ORIGIN` = `https://YOUR-APP.netlify.app` (your Netlify origin; comma-separate to allow more)
    - `OPENAI_API_KEY`, `RESEND_API_KEY` (optional features)
 6. Deploy. Build runs `npm run build`; the `preDeployCommand` runs `prisma migrate deploy` against the database before the new version goes live. Railway injects `PORT` automatically (the server reads `process.env.PORT`).

@@ -7,14 +7,6 @@ const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID;
 const audience = import.meta.env.VITE_AUTH0_AUDIENCE;
 const ROLES_CLAIM = import.meta.env.VITE_AUTH0_ROLES_CLAIM || 'https://itineraryplanner/roles';
 
-/** Only accounts on this email domain may use the app. */
-export const ALLOWED_EMAIL_DOMAIN = (import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN || 'savacations.com').toLowerCase();
-
-export function isEmailAllowed(email?: string | null): boolean {
-  if (!email) return false;
-  return email.toLowerCase().endsWith('@' + ALLOWED_EMAIL_DOMAIN);
-}
-
 /**
  * Auth is enforced when an Auth0 domain + client id are configured. Without
  * them (local dev) the app falls back to a permissive dev identity so it stays
@@ -31,7 +23,6 @@ export type AuthState = {
   user: AuthUser | null;
   email: string | null;
   emailVerified: boolean;
-  emailAllowed: boolean;
   roles: string[];
   isAdmin: boolean;
   login: () => void;
@@ -87,7 +78,6 @@ function useRealAuth(): AuthState {
       : null,
     email,
     emailVerified,
-    emailAllowed: isEmailAllowed(email),
     roles,
     isAdmin: roles.includes('admin'),
     login: () => void a.loginWithRedirect(),
@@ -106,7 +96,6 @@ function useDevAuth(): AuthState {
     user: { name: 'Local Dev', email: 'dev@local.test' },
     email: 'dev@local.test',
     emailVerified: true,
-    emailAllowed: true,
     roles: ['admin', 'user'],
     isAdmin: true,
     login: () => {},
