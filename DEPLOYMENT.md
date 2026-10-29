@@ -30,31 +30,16 @@ In the [Auth0 Dashboard](https://manage.auth0.com):
 
 ### c. Roles
 1. **User Management → Roles → Create Role** named `admin`.
-2. Assign it under **User Management → Users → (user) → Roles**. The `admin` role unlocks admin features. Signing in does not. See section e.
+2. Assign it under **User Management → Users → (user) → Roles**. That role is the admin switch. See section e.
 
-### d. Login Action — allowlist domains and specific addresses
-**Actions → Library → Build Custom** (Login flow trigger). Replace the Action that denies every non-`@savacations.com` address with the script below, **Deploy** it, and keep it on the **Login** flow.
+### d. Login Action — copy roles into the token
+**Actions → Library → Build Custom** (Login flow trigger). Replace any Action that denies an email or domain with the script below, **Deploy** it, and keep it on the **Login** flow.
 
-This Action is the real gate. The API and the SPA repeat the same check. An address has to be listed in all three or the login still fails. Do not add `gmail.com` to `allowedDomains`. Any signed-in user can read clients, proposals, and pricing, so a public domain is not a safe allowlist. Put individual people in `allowedEmails`.
-
-Also remove a **Pre User Registration** Action if it denies non-`@savacations.com` signups.
+The app does not keep its own allowlist. This Action must not call `api.access.deny` based on the email address. Also delete a **Pre User Registration** Action if it denies signups by domain.
 
 ```js
 exports.onExecutePostLogin = async (event, api) => {
   const ns = 'https://itineraryplanner';
-  const allowedDomains = ['savacations.com'];
-  // Specific people only. Leave this empty until you add a real address.
-  const allowedEmails = [
-    // 'name@gmail.com',
-  ];
-  const email = (event.user.email || '').toLowerCase();
-
-  const domainOk = allowedDomains.some((domain) => email.endsWith('@' + domain));
-  const emailOk = allowedEmails.some((allowed) => email === allowed.toLowerCase());
-  if (!domainOk && !emailOk) {
-    return api.access.deny('This account is not allowed to use the itinerary planner.');
-  }
-
   const roles = event.authorization?.roles || [];
   api.idToken.setCustomClaim(`${ns}/roles`, roles);
   api.accessToken.setCustomClaim(`${ns}/roles`, roles);
@@ -69,12 +54,13 @@ Notes:
 - The namespace must match `AUTH0_NAMESPACE`/`AUTH0_ROLES_CLAIM` (backend) and `VITE_AUTH0_ROLES_CLAIM` (frontend); default base is `https://itineraryplanner`.
 - **Email verification UX:** the app does not hard-deny unverified users at Auth0 — instead the SPA shows a "Verify your email" waiting screen (reading `email_verified` from the ID token) and the API rejects unverified tokens (403). If you'd prefer Auth0 to block unverified logins outright, add `if (!event.user.email_verified) return api.access.deny('Please verify your email first.');` to the Action (the waiting screen then won't be reachable).
 
-### e. Outside emails, Google login, and admin
-1. Add the person's exact address to `allowedEmails` in the Action, to backend `ALLOWED_EMAILS`, and to frontend `VITE_ALLOWED_EMAILS`. Redeploy the API and rebuild the frontend. The three lists have to match.
-2. **Google:** **Authentication → Social → Create Connection → Google**, then enable that connection on the SPA application. Google still has to pass the allowlist above. Turning the connection on does not admit every Gmail account.
-3. **User Management → Users**. A Google user appears after their first login. A database user can be created directly. They must verify the email before the app lets them in.
-4. **Admin:** open that user → **Roles** → assign `admin`, then they sign out and back in. That unlocks `/admin`, the providers page, itinerary delete, and pricing-template writes. Any other allowed account can already use clients, proposals, and itineraries — that data is not admin-only.
-5. Remove the role, or block the user, to take access away. Remove the address from all three lists as well.
+### e. Who can sign in, and who is an admin
+Auth0 user management is the control. Any account Auth0 accepts can use the planner, including clients, proposals, and itineraries. Email domain is not checked.
+
+1. **Stop open signup** if you want to choose each person: **Authentication → Database → Username-Password-Authentication → Disable Sign Ups**. Do the same on any social connection you enable. Then people cannot create their own accounts.
+2. **Add someone:** **User Management → Users → Create User**. Any email works. For Google, **Authentication → Social → Create Connection → Google**, enable it on the SPA, and the user is created on their first login. They must verify the email before the app lets them in.
+3. **Make them an admin:** open the user → **Roles** → assign `admin`. They sign out and back in. That unlocks `/admin`, the providers page, itinerary delete, and pricing-template writes.
+4. **Remove access:** open the user → **Block**, or delete the user. **Remove** the `admin` role to leave them in the app without admin tools. Blocking takes effect on the next login.
 
 ---
 
@@ -95,8 +81,6 @@ The backend deploys to Railway as one **service** (the Express API) plus a **Pos
    - `AUTH0_AUDIENCE` = `https://api.itineraryplanner`
    - `AUTH0_NAMESPACE` = `https://itineraryplanner`
    - `AUTH0_ROLES_CLAIM` = `https://itineraryplanner/roles`
-   - `ALLOWED_EMAIL_DOMAINS` = `savacations.com`
-   - `ALLOWED_EMAILS` = `name@gmail.com` (specific addresses only; leave empty if none)
    - `CORS_ORIGIN` = `https://YOUR-APP.netlify.app` (your Netlify origin; comma-separate to allow more)
    - `OPENAI_API_KEY`, `RESEND_API_KEY` (optional features)
 6. Deploy. Build runs `npm run build`; the `preDeployCommand` runs `prisma migrate deploy` against the database before the new version goes live. Railway injects `PORT` automatically (the server reads `process.env.PORT`).
@@ -117,8 +101,6 @@ The backend deploys to Railway as one **service** (the Express API) plus a **Pos
    - `VITE_AUTH0_CLIENT_ID` = SPA client id
    - `VITE_AUTH0_AUDIENCE` = `https://api.itineraryplanner`
    - `VITE_AUTH0_ROLES_CLAIM` = `https://itineraryplanner/roles`
-   - `VITE_ALLOWED_EMAIL_DOMAINS` = `savacations.com`
-   - `VITE_ALLOWED_EMAILS` = same addresses as `ALLOWED_EMAILS` (this value is public in the bundle)
 3. Deploy. After the Netlify URL is known, double-check the Auth0 Allowed Callback/Logout/Web Origins and the backend `CORS_ORIGIN` all reference it.
 
 ---
@@ -128,7 +110,7 @@ The backend deploys to Railway as one **service** (the Express API) plus a **Pos
 - [ ] Visiting the app while logged out redirects to `/login` → Auth0.
 - [ ] Every API route (except `/health`, `/ping`, `/`) rejects requests without a valid Bearer token (401).
 - [ ] Admin-only routes (`/admin/*`, pricing template writes, itinerary delete) reject non-admins (403).
-- [ ] Clients, proposals, and itineraries stay available to every allowed signed-in user. Do not add `gmail.com` to the domain list.
+- [ ] Clients, proposals, and itineraries are available to every signed-in Auth0 user. Block the user in Auth0 to remove that access.
 - [ ] Proposal send still requires a `@savacations.com` From address.
 - [ ] `CORS_ORIGIN` is set to the Netlify domain; requests from other origins are blocked.
 - [ ] No secret (`OPENAI_API_KEY`, `RESEND_API_KEY`, `DATABASE_URL`) appears in the browser bundle — only `VITE_*` public values.

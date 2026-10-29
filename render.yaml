@@ -41,11 +41,6 @@ services:
         value: https://itineraryplanner
       - key: AUTH0_ROLES_CLAIM
         value: https://itineraryplanner/roles
-      # Login domains. Do not add gmail.com; allow individuals via ALLOWED_EMAILS.
-      - key: ALLOWED_EMAIL_DOMAINS
-        value: savacations.com
-      - key: ALLOWED_EMAILS
-        sync: false
       # Must equal the deployed Netlify origin (e.g. https://your-app.netlify.app).
       - key: CORS_ORIGIN
         sync: false
