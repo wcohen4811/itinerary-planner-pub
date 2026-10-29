@@ -57,7 +57,7 @@ function useRealAuth(): AuthState {
   const emailVerified = a.user?.email_verified === true;
   const getToken = useCallback(async () => {
     try {
-      return await a.getAccessTokenSilently();
+      return (await a.getAccessTokenSilently()) ?? null;
     } catch {
       return null;
     }
