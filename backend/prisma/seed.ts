@@ -54,7 +54,6 @@ async function main() {
       }),
     ),
   );
-  const destinationByName = new Map(destinations.map((d) => [d.name.toLowerCase(), d]));
 
   const validFrom = new Date('1970-01-01');
   const validTo = new Date('9999-12-31');
@@ -147,140 +146,11 @@ async function main() {
     }
   }
 
-  // Don't create or duplicate the sample itinerary if the database already has
-  // itineraries. This lets the seed be re-run safely to (re)populate reference
-  // data (providers/destinations/pricing) without ever touching real content.
-  if ((await prisma.itinerary.count()) > 0) {
-    console.log('Seed complete: reference data ensured; existing itineraries left untouched.');
-    return;
-  }
-
-  // Seed sample itinerary “Classic Machu Picchu”
-  // Choose a startDate; can be adjusted later
-  const startDate = new Date('2025-05-01');
-  // Ensure a public user exists
-  const publicUser = await prisma.user.upsert({
-    where: { providerId: 'public' },
-    update: {},
-    create: { provider: 'public', providerId: 'public', email: null },
-    select: { id: true },
-  });
-  const itinerary = await prisma.itinerary.create({
-    data: {
-      userId: publicUser.id,
-      title: 'Classic Machu Picchu',
-      startDate,
-      createdByName: 'Public',
-      updatedByName: 'Public',
-      accommodationLevel: 'four',
-    },
-  });
-
-  const dayData = [
-    {
-      dayNumber: 1,
-      title: 'Lima - Arrival',
-      description:
-        'Depart to Lima. After immigration and customs, meet our rep with a sign. Transfer to hotel. Overnight in Lima.',
-      destination: 'Lima',
-      transferStatus: 'in',
-    },
-    {
-      dayNumber: 2,
-      title: 'Lima City Tour',
-      description:
-        'Miraflores (Parque del Amor), drive by Huaca Huallamarca, Plaza de Armas (City Hall, Government Palace, Cathedral), Convent of Santo Domingo. Return to hotel. (B)',
-      destination: 'Lima',
-      transferStatus: 'none',
-    },
-    {
-      dayNumber: 3,
-      title: 'Lima → Cusco - City Tour',
-      description:
-        'Morning flight to Cusco. Rest for altitude. Afternoon city tour: Cathedral, Koricancha, and the four ruins: Sacsayhuaman, Kenko, Puca Pucara, Tampumachay. Overnight in Cusco. (B)',
-      destination: 'Cusco',
-      transferStatus: 'none',
-    },
-    {
-      dayNumber: 4,
-      title: 'Sacred Valley - Awanakancha, Pisac Market, Ollantaytambo',
-      description:
-        'Full-day Sacred Valley: Awanakancha, Pisac artisan market (or Inca ruins when market closed), lunch included, Ollantaytambo ruins. Overnight in Cusco. (B,L)',
-      destination: 'Sacred Valley',
-      transferStatus: 'none',
-    },
-    {
-      dayNumber: 5,
-      title: 'Cusco → Machu Picchu',
-      description:
-        'Early train to Machu Picchu. Guided visit and lunch at Sanctuary Lodge. Transfer to hotel in Aguas Calientes. (B,L)',
-      destination: 'Machu Picchu',
-      transferStatus: 'none',
-    },
-    {
-      dayNumber: 6,
-      title: 'Machu Picchu → Cusco - Free Day',
-      description:
-        'Free day to explore Machu Picchu (optional Huayna Picchu with permit). Afternoon train to Poroy and transfer to hotel in Cusco. (B)',
-      destination: 'Machu Picchu',
-      transferStatus: 'none',
-    },
-    {
-      dayNumber: 7,
-      title: 'Cusco → Lima - Larco Museum & Folkloric Dinner',
-      description:
-        'Fly to Lima. Visit Larco Museum. Evening Folkloric Dinner Show at Dpaso Restaurant. Overnight in Lima. (B,D)',
-      destination: 'Lima',
-      transferStatus: 'none',
-    },
-    {
-      dayNumber: 8,
-      title: 'Lima - Departure',
-      description: 'Check out at noon. Transfer to airport for your return flight. (B)',
-      destination: 'Lima',
-      transferStatus: 'out',
-    },
-  ] as const;
-
-  for (const d of dayData) {
-    const dt = new Date(new Date(startDate).setDate(startDate.getDate() + (d.dayNumber - 1)));
-    const dest = destinationByName.get(d.destination.toLowerCase());
-    await prisma.day.create({
-      data: {
-        itineraryId: itinerary.id,
-        dayNumber: d.dayNumber,
-        title: d.title,
-        description: d.description,
-        date: dt,
-        dayOfWeek: dt.toLocaleDateString('en-US', { weekday: 'long' }),
-        accommodationLevel: 'four',
-        destination: d.destination,
-        destinationId: dest?.id,
-        transferStatus: d.transferStatus as any,
-      },
-    });
-    const createdDay = await prisma.day.findFirst({
-      where: { itineraryId: itinerary.id, dayNumber: d.dayNumber },
-      select: { id: true },
-    });
-    if (createdDay) {
-      const levels: Array<'three' | 'four' | 'five' | 'deluxe'> = ['three', 'four', 'five', 'deluxe'];
-      const occupancies: Array<'single' | 'double' | 'triple'> = ['single', 'double', 'triple'];
-      const items = [];
-      for (const lv of levels) {
-        for (const occ of occupancies) {
-          items.push({ dayId: createdDay.id, name: 'Hotel', amountUsd: 0, kind: 'hotel', accommodationLevel: lv, occupancy: occ });
-          items.push({ dayId: createdDay.id, name: 'Activity', amountUsd: 0, kind: 'activity', accommodationLevel: lv, occupancy: occ });
-        }
-      }
-      await prisma.dayPricingItem.createMany({
-        data: items,
-        skipDuplicates: true,
-      });
-    }
-  }
-
-  console.log('Seed complete.');
+  // Sample trips are inserted only when that title is missing, so a re-seed
+  // never overwrites a planner's copy of the same name.
+  const { ensureSampleItineraries } = await import('../src/services/sampleItineraries.js');
+  const created = await ensureSampleItineraries();
+  console.log(`Seed complete. Sample itineraries added: ${created}.`);
 }
 
 main()
